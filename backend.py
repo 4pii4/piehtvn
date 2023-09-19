@@ -35,7 +35,7 @@ def main():
         images = c.get_images()
         return pformat([x.json() for x in images])
 
-    app.run(host='localhost', port=7479, debug=True)
+    app.run(host='0.0.0.0', port=7479, debug=True)
 
 
 if __name__ == '__main__':
