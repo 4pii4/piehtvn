@@ -21,6 +21,24 @@ def main():
         for k in results:
             results[k] = [x.json() for x in results[k]]
 
+        results = {str(k): v for k, v in results.items()}
+        return pformat(results)
+
+    @app.route('/custom/<url>')
+    def backend_search(url):
+        params = dict(request.query.decode())
+        if 'page' not in params:
+            params['page'] = 1
+        pages = int(params['page'])
+
+        url = f'https://{DOMAIN}/{url}'
+        results = custom_url(url, pages)
+
+        for k in results:
+            results[k] = [x.json() for x in results[k]]
+
+        results = {str(k): v for k, v in results.items()}
+
         return pformat(results)
 
     @app.route('/get-chapters/<url>')

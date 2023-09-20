@@ -9,6 +9,12 @@ import requests
 from bs4 import BeautifulSoup
 
 DOMAIN = 'hentaivn.autos'
+UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0'
+COMMON_HEADER = {
+    "User-Agent": UA,
+    "Accept-Language": "en-US,en;q=0.5",
+    "Connection": "keep-alive",
+}
 
 
 @dataclass
@@ -25,17 +31,11 @@ class Image:
     url: str
 
     def get_request(self) -> requests.Request:
-        querystring = {"imgmax": "1200"}
         p = urlparse(self.url)
-        payload = ""
+
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0",
-            "Accept": "image/avif,image/webp,*/*",
-            "Accept-Language": "en-US,en;q=0.5",
             "Accept-Encoding": "gzip, deflate, br",
             "Referer": f"{p.scheme}://{p.netloc}/",
-            "DNT": "1",
-            "Connection": "keep-alive",
             "Sec-Fetch-Dest": "image",
             "Sec-Fetch-Mode": "no-cors",
             "Sec-Fetch-Site": "same-site",
@@ -43,9 +43,9 @@ class Image:
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
             "TE": "trailers"
-        }
+        } | COMMON_HEADER
 
-        return requests.Request("GET", self.url, data=payload, headers=headers, params=querystring)
+        return requests.Request("GET", self.url, headers=headers, params={"imgmax": "1200"})
 
     def json(self):
         return self.url
@@ -55,22 +55,19 @@ class Image:
 class Chapter:
     title: str
     url: str
-    date: datetime
+    time: datetime
     domain: str
 
     def get_images(self) -> list[Image]:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
             'Referer': f'https://{self.domain}/{self.url}',
-            'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
             'Sec-Fetch-Site': 'same-origin',
             'Sec-GPC': '1',
-        }
+        } | COMMON_HEADER
 
         response = requests.get(
             f'https://{self.domain}/{quote(self.url)}',
@@ -83,7 +80,7 @@ class Chapter:
         return [Image(re.sub(pattern, '', img.attrs['data-src'])) for img in parser.select('img.lazyload')]
 
     def json(self):
-        return {'title': self.title, 'url': self.url, 'date': self.date}
+        return {'title': self.title, 'url': self.url, 'time': self.time.strftime('%d/%m/%Y'), 'domain': self.domain}
 
 
 @dataclass
@@ -103,17 +100,13 @@ class Doc:
 
     def get_chapters(self) -> list[Chapter]:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0',
             'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.5',
             'Referer': f'https://{self.domain}/list-showchapter.php?idchapshow={self.get_id()}&idlinkanime={self.get_name()}',
-            'DNT': '1',
-            'Connection': 'keep-alive',
             'Sec-Fetch-Dest': 'empty',
             'Sec-Fetch-Mode': 'cors',
             'Sec-Fetch-Site': 'same-origin',
             'Sec-GPC': '1',
-        }
+        } | COMMON_HEADER
 
         params = {
             'idchapshow': self.get_id(),
@@ -138,19 +131,63 @@ class Doc:
         return chapters
 
     def json(self):
-        # return {'title': self.title, 'cover': self.cover.json(), 'tags': [tag.json() for tag in self.tags], 'url': self.url, 'domain': self.domain}
         return {'title': self.title, 'url': self.url, 'cover': self.cover.json(), 'domain': self.domain}
 
 
-def search(query: str, pages: int = 10) -> dict[int:Doc]:
-    def single_search(page: int) -> list[Doc]:
-        print(f'single search {query} {page}')
+def response2docs(response: requests.Response) -> list[Doc]:
+    parser = BeautifulSoup(response.text, 'html.parser')
+
+    _docs = []
+    for doc in parser.select('li.item'):
+        title = doc.select_one('div:nth-child(2) > p:nth-child(1) > a:nth-child(1)').text
+        cover = doc.select_one('img').attrs['data-src']
+        # tags = [Tag(x.text, x.attrs['title']) for x in doc.select('span > a')]
+        url = doc.select_one('div > a').attrs['href']
+        # docs.append(Doc(title, Image(cover), tags, url, __DOMAIN))
+        _docs.append(Doc(title, Image(cover), url, DOMAIN))
+
+    return _docs
+
+
+def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
+    def single_custom(lurl: str, page: int) -> list[Doc]:
+        lurl = f'{lurl}?page={page}'
+
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'DNT': '1',
-            'Connection': 'keep-alive',
+            'Referer': lurl,
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-User': '?1',
+            'Sec-GPC': '1',
+        } | COMMON_HEADER
+
+        params = {
+            'page': page,
+        }
+
+        response = requests.get(lurl, params=params, headers=headers)
+        pass
+        return response2docs(response)
+
+    docs = {}
+    r = list(range(1, pages + 1))
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_to_url = {executor.submit(single_custom, url, page): page for page in r}
+        for future in concurrent.futures.as_completed(future_to_url):
+            page = future_to_url[future]
+            docs[page] = future.result()
+
+    return docs
+
+
+def search(query: str, pages: int = 10) -> dict[int:list[Doc]]:
+    def single_search(page: int) -> list[Doc]:
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Upgrade-Insecure-Requests': '1',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
@@ -158,25 +195,15 @@ def search(query: str, pages: int = 10) -> dict[int:Doc]:
             'Sec-GPC': '1',
             'Pragma': 'no-cache',
             'Cache-Control': 'no-cache',
-        }
+        } | COMMON_HEADER
+
         params = {
             'key': query,
             'page': page,
         }
 
         response = requests.get(f'https://{DOMAIN}/tim-kiem-truyen.html', params=params, headers=headers)
-        parser = BeautifulSoup(response.text, 'html.parser')
-
-        _docs = []
-        for doc in parser.select('li.item'):
-            title = doc.select_one('div:nth-child(2) > p:nth-child(1) > a:nth-child(1)').text
-            cover = doc.select_one('img').attrs['data-src']
-            # tags = [Tag(x.text, x.attrs['title']) for x in doc.select('span > a')]
-            url = doc.select_one('div > a').attrs['href']
-            # docs.append(Doc(title, Image(cover), tags, url, __DOMAIN))
-            _docs.append(Doc(title, Image(cover), url, DOMAIN))
-
-        return _docs
+        return response2docs(response)
 
     docs = {}
     r = list(range(1, pages + 1))
