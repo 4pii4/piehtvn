@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 import concurrent.futures
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from urllib.parse import urlparse, quote
 
 import requests
@@ -30,22 +32,28 @@ class Tag:
 class Image:
     url: str
 
+    def __hash__(self):
+        return hash(self.url)
+
     def get_request(self) -> requests.Request:
         p = urlparse(self.url)
 
         headers = {
-            "Accept-Encoding": "gzip, deflate, br",
-            "Referer": f"{p.scheme}://{p.netloc}/",
-            "Sec-Fetch-Dest": "image",
-            "Sec-Fetch-Mode": "no-cors",
-            "Sec-Fetch-Site": "same-site",
-            "Sec-GPC": "1",
-            "Pragma": "no-cache",
-            "Cache-Control": "no-cache",
-            "TE": "trailers"
-        } | COMMON_HEADER
+                      "Accept-Encoding": "gzip, deflate, br",
+                      "Referer": f"{p.scheme}://{p.netloc}/",
+                      "Sec-Fetch-Dest": "image",
+                      "Sec-Fetch-Mode": "no-cors",
+                      "Sec-Fetch-Site": "same-site",
+                      "Sec-GPC": "1",
+                      "Pragma": "no-cache",
+                      "Cache-Control": "no-cache",
+                      "TE": "trailers"
+                  } | COMMON_HEADER
 
         return requests.Request("GET", self.url, headers=headers, params={"imgmax": "1200"})
+
+    def file_name(self) -> str:
+        return os.path.basename(urlparse(self.url).path)
 
     def json(self):
         return self.url
@@ -60,14 +68,14 @@ class Chapter:
 
     def get_images(self) -> list[Image]:
         headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Referer': f'https://{self.domain}/{self.url}',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-GPC': '1',
-        } | COMMON_HEADER
+                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                      'Referer': f'https://{self.domain}/{self.url}',
+                      'Upgrade-Insecure-Requests': '1',
+                      'Sec-Fetch-Dest': 'document',
+                      'Sec-Fetch-Mode': 'navigate',
+                      'Sec-Fetch-Site': 'same-origin',
+                      'Sec-GPC': '1',
+                  } | COMMON_HEADER
 
         response = requests.get(
             f'https://{self.domain}/{quote(self.url)}',
@@ -81,6 +89,25 @@ class Chapter:
 
     def json(self):
         return {'title': self.title, 'url': self.url, 'time': self.time.strftime('%d/%m/%Y'), 'domain': self.domain}
+
+    def download_all_images(self) -> dict[Image:BytesIO]:
+        def download_image(image: Image) -> bytes:
+            request = image.get_request()
+            with requests.Session() as sss:
+                pr = sss.prepare_request(request=request)
+                return sss.send(request=pr).content
+
+        images = self.get_images()
+        finished = {}
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future_to_url = {executor.submit(download_image, image): image for image in images}
+            for future in concurrent.futures.as_completed(future_to_url):
+                image = future_to_url[future]
+                content = future.result()
+                finished[image] = content
+
+        return finished
 
 
 @dataclass
@@ -100,13 +127,13 @@ class Doc:
 
     def get_chapters(self) -> list[Chapter]:
         headers = {
-            'Accept': '*/*',
-            'Referer': f'https://{self.domain}/list-showchapter.php?idchapshow={self.get_id()}&idlinkanime={self.get_name()}',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-GPC': '1',
-        } | COMMON_HEADER
+                      'Accept': '*/*',
+                      'Referer': f'https://{self.domain}/list-showchapter.php?idchapshow={self.get_id()}&idlinkanime={self.get_name()}',
+                      'Sec-Fetch-Dest': 'empty',
+                      'Sec-Fetch-Mode': 'cors',
+                      'Sec-Fetch-Site': 'same-origin',
+                      'Sec-GPC': '1',
+                  } | COMMON_HEADER
 
         params = {
             'idchapshow': self.get_id(),
@@ -154,15 +181,15 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
         lurl = f'{lurl}?page={page}'
 
         headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Referer': lurl,
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-User': '?1',
-            'Sec-GPC': '1',
-        } | COMMON_HEADER
+                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                      'Referer': lurl,
+                      'Upgrade-Insecure-Requests': '1',
+                      'Sec-Fetch-Dest': 'document',
+                      'Sec-Fetch-Mode': 'navigate',
+                      'Sec-Fetch-Site': 'same-origin',
+                      'Sec-Fetch-User': '?1',
+                      'Sec-GPC': '1',
+                  } | COMMON_HEADER
 
         params = {
             'page': page,
@@ -187,15 +214,15 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
 def search(query: str, pages: int = 10) -> dict[int:list[Doc]]:
     def single_search(page: int) -> list[Doc]:
         headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'cross-site',
-            'Sec-GPC': '1',
-            'Pragma': 'no-cache',
-            'Cache-Control': 'no-cache',
-        } | COMMON_HEADER
+                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                      'Upgrade-Insecure-Requests': '1',
+                      'Sec-Fetch-Dest': 'document',
+                      'Sec-Fetch-Mode': 'navigate',
+                      'Sec-Fetch-Site': 'cross-site',
+                      'Sec-GPC': '1',
+                      'Pragma': 'no-cache',
+                      'Cache-Control': 'no-cache',
+                  } | COMMON_HEADER
 
         params = {
             'key': query,
