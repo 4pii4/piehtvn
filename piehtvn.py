@@ -114,7 +114,7 @@ class Chapter:
 class Doc:
     title: str
     cover: Image
-    # tags: list[Tag]
+    tags: list[Tag]
     url: str
     domain: str
 
@@ -158,7 +158,7 @@ class Doc:
         return chapters
 
     def json(self):
-        return {'title': self.title, 'url': self.url, 'cover': self.cover.json(), 'domain': self.domain}
+        return {'title': self.title, 'url': self.url, 'cover': self.cover.json(), 'domain': self.domain, 'tags': [x.json() for x in self.tags]}
 
 
 def response2docs(response: requests.Response) -> list[Doc]:
@@ -168,10 +168,10 @@ def response2docs(response: requests.Response) -> list[Doc]:
     for doc in parser.select('li.item'):
         title = doc.select_one('div:nth-child(2) > p:nth-child(1) > a:nth-child(1)').text
         cover = doc.select_one('img').attrs['data-src']
-        # tags = [Tag(x.text, x.attrs['title']) for x in doc.select('span > a')]
+        tags = [Tag(x.text, x.attrs['title']) for x in doc.select('span > a')]
         url = doc.select_one('div > a').attrs['href']
         # docs.append(Doc(title, Image(cover), tags, url, __DOMAIN))
-        _docs.append(Doc(title, Image(cover), url, DOMAIN))
+        _docs.append(Doc(title, Image(cover), tags, url, DOMAIN))
 
     return _docs
 
