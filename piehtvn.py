@@ -16,7 +16,6 @@ COMMON_HEADER = {
     "User-Agent": UA,
     "Accept-Language": "en-US,en;q=0.5",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*",
 }
 
 
@@ -125,6 +124,17 @@ class Doc:
     def get_name(self) -> str:
         pattern = re.compile(r'^/[0-9]*-doc-truyen-')
         return pattern.sub('', self.url)
+
+    def get_metadata(self) -> dict:
+        headers = {
+            'Referer': f'https://{self.domain}/${self.url}',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-GPC': '1',
+        } | COMMON_HEADER
+
+        response = requests.get(f'https://{self.domain}/{self.url}', headers=headers)
 
     def get_chapters(self) -> list[Chapter]:
         headers = {

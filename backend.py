@@ -1,11 +1,16 @@
 
 import json5
-from bottle import Bottle, request
+from bottle import Bottle, request, response
 from piehtvn import *
 
 
 def main():
     app = Bottle()
+
+    def generate_response(obj):
+        response.set_header("Access-Control-Allow-Origin", "*")
+        response.content_type = 'application/json'
+        return json5.dumps(obj, ensure_ascii=False, quote_keys=True)
 
     @app.route('/search')
     def backend_search():
@@ -22,7 +27,7 @@ def main():
         for result in results:
             results[result] = [x.json() for x in results[result]]
 
-        return json5.dumps(results, ensure_ascii=False, quote_keys=True)
+        return generate_response(results)
 
     @app.route('/custom/<url>')
     def backend_search(url):
@@ -37,17 +42,19 @@ def main():
         for result in results:
             results[result] = [x.json() for x in results[result]]
 
-        return json5.dumps(results, ensure_ascii=False, quote_keys=True)
+        return generate_response(results)
 
     @app.route('/get-chapters/<url>')
     def backend_get_chapters(url):
         doc = Doc('', Image(''), [], url, DOMAIN)
-        return json5.dumps([x.json() for x in doc.get_chapters()], ensure_ascii=False, quote_keys=True)
+        response.set_header("Access-Control-Allow-Origin", "*")
+        return generate_response([x.json() for x in doc.get_chapters()])
 
     @app.route('/get-images/<url>')
     def backend_get_images(url):
         chapter = Chapter('', url, datetime.now(), DOMAIN)
-        return json5.dumps([image.json() for image in chapter.get_images()], ensure_ascii=False, quote_keys=True)
+        response.set_header("Access-Control-Allow-Origin", "*")
+        return generate_response([image.json() for image in chapter.get_images()])
 
     app.run(host='0.0.0.0', port=7479, debug=True)
 
