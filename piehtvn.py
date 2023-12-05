@@ -16,6 +16,7 @@ COMMON_HEADER = {
     "User-Agent": UA,
     "Accept-Language": "en-US,en;q=0.5",
     "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
 }
 
 
