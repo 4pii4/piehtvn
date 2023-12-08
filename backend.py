@@ -47,13 +47,16 @@ def main():
     @app.route('/get-chapters/<url>')
     def backend_get_chapters(url):
         doc = Doc('', Image(''), [], url, DOMAIN)
-        response.set_header("Access-Control-Allow-Origin", "*")
         return generate_response([x.json() for x in doc.get_chapters()])
+
+    @app.route('/get-metadata/<url>')
+    def backend_get_chapter_metadata(url):
+        doc = Doc('', Image(''), [], url, DOMAIN)
+        return generate_response(doc.get_metadata().json())
 
     @app.route('/get-images/<url>')
     def backend_get_images(url):
-        chapter = Chapter('', url, datetime.now(), DOMAIN)
-        response.set_header("Access-Control-Allow-Origin", "*")
+        chapter = Chapter('', url, 0, DOMAIN)
         return generate_response([image.json() for image in chapter.get_images()])
 
     app.run(host='0.0.0.0', port=7479, debug=True)
