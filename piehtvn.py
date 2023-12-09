@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
+import collections.abc
 import concurrent.futures
+import datetime
+import io
 import os
 import re
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
-from io import BytesIO
-from urllib.parse import urlparse, quote
 
 import requests
+import six
 from bs4 import BeautifulSoup
 
 DOMAIN = 'hentaivn.autos'
@@ -23,34 +26,63 @@ def timestamp(date: datetime) -> int:
     return int(date.timestamp())
 
 
+def index_of_first_after(lst, predicate):
+    for i, v in enumerate(lst):
+        if predicate(v):
+            return i + 1
+    return None
+
+
+def iterable(arg):
+    return (
+            isinstance(arg, collections.abc.Iterable)
+            and not isinstance(arg, six.string_types)
+    )
+
+
+class Base:
+    @staticmethod
+    def subjson(x):
+        if hasattr(x, 'json'):
+            return x.json()
+        else:
+            return x
+
+    def json(self):
+        d = {}
+        for key, val in self.__dict__.items():
+            if val is None:
+                continue
+
+            if iterable(val):
+                d[key] = [self.subjson(i) for i in val]
+            else:
+                d[key] = self.subjson(val)
+        return d
+
+
 @dataclass
-class Link:
+class Link(Base):
     text: str
     url: str
 
-    def json(self):
-        return {'url': self.url, 'text': self.text}
-
 
 @dataclass
-class Tag:
+class Tag(Base):
     name: str
     desc: str
     link: str
 
-    def json(self):
-        return {'name': self.name, 'desc': self.desc, 'link': self.link}
-
 
 @dataclass
-class Image:
+class Image(Base):
     url: str
 
     def __hash__(self):
         return hash(self.url)
 
     def get_request(self) -> requests.Request:
-        p = urlparse(self.url)
+        p = urllib.parse.urlparse(self.url)
 
         headers = {
                       "Accept-Encoding": "gzip, deflate, br",
@@ -67,14 +99,11 @@ class Image:
         return requests.Request("GET", self.url, headers=headers, params={"imgmax": "1200"})
 
     def file_name(self) -> str:
-        return os.path.basename(urlparse(self.url).path)
-
-    def json(self):
-        return self.url
+        return os.path.basename(urllib.parse.urlparse(self.url).path)
 
 
 @dataclass
-class Chapter:
+class Chapter(Base):
     title: str
     url: str
     time: int
@@ -92,7 +121,7 @@ class Chapter:
                   } | COMMON_HEADER
 
         response = requests.get(
-            f'https://{self.domain}/{quote(self.url)}',
+            f'https://{self.domain}/{urllib.parse.quote(self.url)}',
             headers=headers,
             params={'ie': 'utf-8'}
         )
@@ -101,10 +130,7 @@ class Chapter:
         pattern = re.compile(r'\?imgmax=[0-9]*$')
         return [Image(re.sub(pattern, '', img.attrs['data-src'])) for img in parser.select('img.lazyload')]
 
-    def json(self):
-        return {'title': self.title, 'url': self.url, 'time': self.time, 'domain': self.domain}
-
-    def download_all_images(self) -> dict[Image:BytesIO]:
+    def download_all_images(self) -> dict[Image:io.BytesIO]:
         def download_image(image: Image) -> bytes:
             request = image.get_request()
             with requests.Session() as sss:
@@ -125,72 +151,31 @@ class Chapter:
 
 
 @dataclass
-class DocInfo:
+class DocInfo(Base):
+    cover: str
+    id: int
     name: str
     other_names: list[Link]
-    characters: list[Link]
-    cover: str
     tags: list[Tag]
     translators: list[Link]
     authors: list[Link]
+    characters: list[Link]
+    doujinshi: Link
     uploader: str
     status: Link
-    description: str
+    desc: str
     last_updated: int
     likes: int
     dislikes: int
     follow_at: Link
 
-    def json(self):
-        jj = {}
-        if self.name is not None:
-            jj['name'] = self.name
-        if self.other_names is not None:
-            jj['other_names'] = [x.json() for x in self.other_names]
-        if self.characters is not None:
-            jj['characters'] = [x.json() for x in self.characters]
-        if self.cover is not None:
-            jj['cover'] = self.cover
-        if self.tags is not None:
-            jj['tags'] = [x.json() for x in self.tags]
-        if self.translators is not None:
-            jj['translators'] = [x.json() for x in self.translators]
-        if self.authors is not None:
-            jj['authors'] = [x.json() for x in self.authors]
-        if self.uploader is not None:
-            jj['uploader'] = self.uploader
-        if self.status is not None:
-            jj['status'] = self.status.json()
-        if self.description is not None:
-            jj['description'] = self.description
-        if self.last_updated is not None:
-            jj['last_updated'] = self.last_updated
-        if self.likes is not None:
-            jj['likes'] = self.likes
-        if self.dislikes is not None:
-            jj['dislikes'] = self.dislikes
-        if self.follow_at is not None:
-            jj['follow_at'] = self.follow_at.json()
 
-        return jj
-
-
-
-
-def index_of_first_after(lst, predicate):
-    for i, v in enumerate(lst):
-        if predicate(v):
-            return i + 1
-    return None
-
-
-# noinspection PyMethodMayBeStatic
 @dataclass
-class Doc:
-    title: str
+class Doc(Base):
+    name: str
+    url: str
     cover: Image
     tags: list[Tag]
-    url: str
     domain: str
 
     def get_id(self) -> int:
@@ -232,36 +217,38 @@ class Doc:
 
         return chapters
 
-    # region janky ass parsing
-    def handle_categories(self, parent, element):
-        parent.tags = [Tag(x.text, x.attrs['title'], x.attrs['href']) for x in element.parent.findAll('a')]
-
-    def handle_other_names(self, parent, element):
-        parent.other_names = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
-
-    def handle_translator(self, parent, element):
-        parent.translators = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
-
-    def handle_author(self, parent, element):
-        parent.authors = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
-
-    def handle_status(self, parent, element):
-        parent.status = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')][0]
-
-    def handle_characters(self, parent, element):
-        parent.characters = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
-
-    def handle_description(self, parent, element):
-        lst = list(element.parent.parent.findAll('p'))
-        parent.description = lst[index_of_first_after(lst, lambda x: x.text.startswith("Nội dung"))].text
-
-    def handle_follow_at(self, parent, element):
-        parent.follow_at = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')][0]
-
-    def handle_uploader(self, parent, element):
-        parent.uploader = element.parent.text.removeprefix('Thực hiện: ')
-
     def get_metadata(self):
+        def handle_categories(parent, element):
+            parent.tags = [Tag(x.text, x.attrs['title'], x.attrs['href']) for x in element.parent.findAll('a')]
+
+        def handle_other_names(parent, element):
+            parent.other_names = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
+
+        def handle_translator(parent, element):
+            parent.translators = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
+
+        def handle_author(parent, element):
+            parent.authors = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
+
+        def handle_status(parent, element):
+            parent.status = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')][0]
+
+        def handle_characters(parent, element):
+            parent.characters = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
+
+        def handle_description(parent, element):
+            lst = list(element.parent.parent.findAll('p'))
+            parent.desc = lst[index_of_first_after(lst, lambda x: x.text.startswith("Nội dung"))].text
+
+        def handle_follow_at(parent, element):
+            parent.follow_at = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')][0]
+
+        def handle_uploader(parent, element):
+            parent.uploader = element.parent.text.removeprefix('Thực hiện: ')
+
+        def handle_doujinshi(parent, element):
+            parent.doujinshi = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')][0]
+
         headers = {
                       'Referer': f'https://{self.domain}/${self.url}'.encode(),
                       'Sec-Fetch-Dest': 'document',
@@ -271,43 +258,42 @@ class Doc:
                   } | COMMON_HEADER
 
         response = requests.get(f'https://{self.domain}/{self.url}'.encode(), headers=headers)
+        print(f'boutta call {response.url}')
 
         handlers = {
-            "Thể Loại:": self.handle_categories,
-            "Nhóm dịch:": self.handle_translator,
-            "Tên Khác: ": self.handle_other_names,
-            "Tác giả: ": self.handle_author,
-            "Tình Trạng: ": self.handle_status,
-            "Nội dung:": self.handle_description,
-            "Theo dõi tại:": self.handle_follow_at,
-            "Nhân vật: ": self.handle_characters,
-            "Thực hiện:": self.handle_uploader,
+            "Tên Khác": handle_other_names,
+            "Thể Loại": handle_categories,
+            "Nhóm dịch": handle_translator,
+            "Tác giả": handle_author,
+            "Nhân vật": handle_characters,
+            "Doujinshi": handle_doujinshi,
+            "Thực hiện": handle_uploader,
+            "Tình Trạng": handle_status,
+            "Nội dung": handle_description,
+            "Theo dõi tại": handle_follow_at,
         }
 
         soup = BeautifulSoup(response.text, 'html.parser')
         page_info = soup.find('div', {'class': 'page-info'})
-        doc = DocInfo(None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+        # noinspection PyTypeChecker
+        doc = DocInfo(None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+        doc.cover = soup.select_one('.page-ava > img').attrs['src']
+        doc.id = int(soup.select_one('#myInputxx').attrs['value'])
         doc.name = page_info.find('a').text.removeprefix("\n").removesuffix("\n")
-        doc.last_updated = timestamp(datetime.strptime(page_info.find('i').text, '%H:%M - %d/%m/%Y'))
         doc.likes = int(soup.find('div', {'class': 'but_like'}).text)
         doc.dislikes = int(soup.find('div', {'class': 'but_unlike'}).text)
-        doc.cover = soup.select_one('.page-ava > img').attrs['src']
+        doc.last_updated = timestamp(datetime.strptime(page_info.find('i').text, '%H:%M - %d/%m/%Y'))
 
         for pElement in page_info.findAll('p'):
             span = pElement.find('span')
             if span is None or pElement is None:
                 continue
 
-            if span.text in handlers.keys():
-                handlers[span.text](doc, span)
+            for handler in handlers.keys():
+                if span.text.startswith(handler):
+                    handlers[handler](doc, span)
 
         return doc
-
-    # endregion
-
-    def json(self):
-        return {'title': self.title, 'url': self.url, 'cover': self.cover.json(), 'domain': self.domain,
-                'tags': [x.json() for x in self.tags]}
 
 
 def response2docs(response: requests.Response) -> list[Doc]:
@@ -319,7 +305,7 @@ def response2docs(response: requests.Response) -> list[Doc]:
         cover = doc.select_one('img').attrs['data-src']
         tags = [Tag(x.text, x.attrs['title'], x.attrs['href']) for x in doc.select('span > a')]
         url = doc.select_one('div > a').attrs['href']
-        _docs.append(Doc(title, Image(cover), tags, url, DOMAIN))
+        _docs.append(Doc(title, url, Image(cover), tags, DOMAIN))
 
     return _docs
 
@@ -359,7 +345,7 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
     return docs
 
 
-def search(query: str, pages: int = 10) -> dict[int:list[Doc]]:
+def search(query: str, pages: int = 1) -> dict[int:list[Doc]]:
     def single_search(page: int) -> list[Doc]:
         headers = {
                       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
