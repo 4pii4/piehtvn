@@ -30,6 +30,7 @@ def main():
         return generate_response(results)
 
     @app.route('/custom/<url>')
+    @app.route('/custom//<url>')
     def backend_search(url):
         params = dict(request.query.decode())
         if 'page' not in params:
@@ -45,16 +46,19 @@ def main():
         return generate_response(results)
 
     @app.route('/get-chapters/<url>')
+    @app.route('/get-chapters//<url>')
     def backend_get_chapters(url):
         doc = Doc('', url, Image(''), [], DOMAIN)
         return generate_response([x.json() for x in doc.get_chapters()])
 
     @app.route('/get-metadata/<url>')
+    @app.route('/get-metadata//<url>')
     def backend_get_chapter_metadata(url):
         doc = Doc('', url, Image(''), [], DOMAIN)
         return generate_response(doc.get_metadata().json())
 
     @app.route('/get-images/<url>')
+    @app.route('/get-images//<url>')
     def backend_get_images(url):
         chapter = Chapter('', url, 0, DOMAIN)
         return generate_response([image.url for image in chapter.get_images()])
