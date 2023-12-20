@@ -1,69 +1,65 @@
-
-import json5
+import dataclasses
+import json
 from bottle import Bottle, request, response
 from piehtvn import *
 
 
 def main():
     app = Bottle()
+    with open('config.json') as f:
+        config = json.loads(f.read())
+
+    setdomain(config['domain'])
 
     def generate_response(obj):
+        class EnhancedJSONEncoder(json.JSONEncoder):
+            def default(self, o):
+                if dataclasses.is_dataclass(o):
+                    return dataclasses.asdict(o)
+                return super().default(o)
+
         response.set_header("Access-Control-Allow-Origin", "*")
         response.content_type = 'application/json'
-        return json5.dumps(obj, ensure_ascii=False, quote_keys=True)
+        return json.dumps(obj, ensure_ascii=False, cls=EnhancedJSONEncoder)
 
     @app.route('/search')
     def backend_search():
-        params = dict(request.query.decode())
-        if 'query' not in params:
-            return 'Missing query parameter'
-        if 'page' not in params:
-            params['page'] = 1
-        query = params['query']
-        pages = int(params['page'])
+        if request.query.query is None:
+            return 'missing query parameter'
+        query = request.query.query
+        pages = int(request.query.pages or 1)
 
-        results = search(query, pages)
+        return generate_response(search(query, pages))
 
-        for result in results:
-            results[result] = [x.json() for x in results[result]]
+    @app.route('/custom')
+    def backend_search():
+        if request.query.url is None:
+            return 'missing url parameter'
 
-        return generate_response(results)
+        pages = int(request.query.pages or 1)
+        url = f'https://{DOMAIN}/{request.query.url}'
 
-    @app.route('/custom/<url>')
-    @app.route('/custom//<url>')
-    def backend_search(url):
-        params = dict(request.query.decode())
-        if 'page' not in params:
-            params['page'] = 1
-        pages = int(params['page'])
+        return generate_response(custom_url(url, pages))
 
-        url = f'https://{DOMAIN}/{url}'
-        results = custom_url(url, pages)
+    # noinspection PyTypeChecker
+    @app.route('/get-chapters')
+    def backend_get_chapters():
+        doc = Doc(None, request.query.url, None, None, DOMAIN)
+        return generate_response(doc.get_chapters())
 
-        for result in results:
-            results[result] = [x.json() for x in results[result]]
+    # noinspection PyTypeChecker
+    @app.route('/get-metadata')
+    def backend_get_chapter_metadata():
+        doc = Doc(None, request.query.url.removeprefix('.html') + '.html', None, None, DOMAIN)
+        return generate_response(doc.get_metadata())
 
-        return generate_response(results)
+    # noinspection PyTypeChecker
+    @app.route('/get-images')
+    def backend_get_images():
+        chapter = Chapter(None, request.query.url.removeprefix('.html') + '.html', None, DOMAIN)
+        return generate_response(chapter.get_images())
 
-    @app.route('/get-chapters/<url>')
-    @app.route('/get-chapters//<url>')
-    def backend_get_chapters(url):
-        doc = Doc('', url, Image(''), [], DOMAIN)
-        return generate_response([x.json() for x in doc.get_chapters()])
-
-    @app.route('/get-metadata/<url>')
-    @app.route('/get-metadata//<url>')
-    def backend_get_chapter_metadata(url):
-        doc = Doc('', url, Image(''), [], DOMAIN)
-        return generate_response(doc.get_metadata().json())
-
-    @app.route('/get-images/<url>')
-    @app.route('/get-images//<url>')
-    def backend_get_images(url):
-        chapter = Chapter('', url, 0, DOMAIN)
-        return generate_response([image.url for image in chapter.get_images()])
-
-    app.run(host='0.0.0.0', port=7479, debug=True)
+    app.run(host=config['host'], port=config['port'], debug=config['debug'])
 
 
 if __name__ == '__main__':

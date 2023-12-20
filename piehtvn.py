@@ -40,6 +40,15 @@ def iterable(arg):
     )
 
 
+def setdomain(newdomain):
+    global DOMAIN
+    DOMAIN = newdomain
+
+
+def linkify(l):
+    return l.removeprefix('/').removesuffix('.html')
+
+
 class Base:
     @staticmethod
     def subjson(x):
@@ -109,7 +118,7 @@ class Chapter(Base):
     time: int
     domain: str
 
-    def get_images(self) -> list[Image]:
+    def get_images(self) -> list[str]:
         headers = {
                       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                       'Referer': f'https://{self.domain}/{self.url}',
@@ -128,7 +137,7 @@ class Chapter(Base):
 
         parser = BeautifulSoup(response.text, 'html.parser')
         pattern = re.compile(r'\?imgmax=[0-9]*$')
-        return [Image(re.sub(pattern, '', img.attrs['data-src'])) for img in parser.select('img.lazyload')]
+        return [re.sub(pattern, '', img.attrs['data-src']) for img in parser.select('img.lazyload')]
 
     def download_all_images(self) -> dict[Image:io.BytesIO]:
         def download_image(image: Image) -> bytes:
@@ -155,14 +164,14 @@ class DocInfo(Base):
     cover: str
     id: int
     name: str
-    other_names: list[Link]
+    other_names: list[str]
     tags: list[Tag]
     translators: list[Link]
-    authors: list[Link]
-    characters: list[Link]
-    doujinshi: Link
+    authors: list[str]
+    characters: list[str]
+    doujinshi: str
     uploader: str
-    status: Link
+    status: str
     desc: str
     last_updated: int
     likes: int
@@ -174,7 +183,7 @@ class DocInfo(Base):
 class Doc(Base):
     name: str
     url: str
-    cover: Image
+    cover: str
     tags: list[Tag]
     domain: str
 
@@ -182,7 +191,7 @@ class Doc(Base):
         return int(self.url.removeprefix('/').split('-')[0])
 
     def get_name(self) -> str:
-        pattern = re.compile(r'^/[0-9]*-doc-truyen-')
+        pattern = re.compile(r'^[0-9]*-doc-truyen-')
         return pattern.sub('', self.url)
 
     def get_chapters(self) -> list[Chapter]:
@@ -211,7 +220,7 @@ class Doc(Base):
         for main, meta in zip(mains, metas):
             date = datetime.strptime(meta.text, '%d/%m/%Y')
             title = main.select_one('td > a > h2').text
-            link = main.select_one('td > a').attrs['href']
+            link = linkify(main.select_one('td > a').attrs['href'])
 
             chapters.append(Chapter(title, link, timestamp(date), self.domain))
 
@@ -219,35 +228,36 @@ class Doc(Base):
 
     def get_metadata(self):
         def handle_categories(parent, element):
-            parent.tags = [Tag(x.text, x.attrs['title'], x.attrs['href']) for x in element.parent.findAll('a')]
+            parent.tags = [Tag(x.text, x.attrs['title'], linkify(x.attrs['href'])) for x in element.parent.findAll('a')]
 
         def handle_other_names(parent, element):
-            parent.other_names = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
+            parent.other_names = [x.text for x in element.parent.findAll('a')]
 
         def handle_translator(parent, element):
-            parent.translators = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
+            parent.translators = [Link(x.text, linkify(x.attrs['href'])) for x in element.parent.findAll('a')]
 
         def handle_author(parent, element):
-            parent.authors = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
+            parent.authors = [x.text for x in element.parent.findAll('a')]
 
         def handle_status(parent, element):
-            parent.status = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')][0]
+            parent.status = element.parent.find('a').text
 
         def handle_characters(parent, element):
-            parent.characters = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')]
+            parent.characters = [x.text for x in element.parent.findAll('a')]
 
         def handle_description(parent, element):
             lst = list(element.parent.parent.findAll('p'))
             parent.desc = lst[index_of_first_after(lst, lambda x: x.text.startswith("Nội dung"))].text
 
         def handle_follow_at(parent, element):
-            parent.follow_at = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')][0]
+            e = element.parent.find('a')
+            parent.follow_at = Link(e.text, linkify(e.attrs['href']))
 
         def handle_uploader(parent, element):
             parent.uploader = element.parent.text.removeprefix('Thực hiện: ')
 
         def handle_doujinshi(parent, element):
-            parent.doujinshi = [Link(x.text, x.attrs['href']) for x in element.parent.findAll('a')][0]
+            parent.doujinshi = element.parent.find('a').text
 
         headers = {
                       'Referer': f'https://{self.domain}/${self.url}'.encode(),
@@ -258,7 +268,6 @@ class Doc(Base):
                   } | COMMON_HEADER
 
         response = requests.get(f'https://{self.domain}/{self.url}'.encode(), headers=headers)
-        print(f'boutta call {response.url}')
 
         handlers = {
             "Tên Khác": handle_other_names,
@@ -303,9 +312,9 @@ def response2docs(response: requests.Response) -> list[Doc]:
     for doc in parser.select('li.item'):
         title = doc.select_one('div:nth-child(2) > p:nth-child(1) > a:nth-child(1)').text
         cover = doc.select_one('img').attrs['data-src']
-        tags = [Tag(x.text, x.attrs['title'], x.attrs['href']) for x in doc.select('span > a')]
-        url = doc.select_one('div > a').attrs['href']
-        _docs.append(Doc(title, url, Image(cover), tags, DOMAIN))
+        tags = [Tag(x.text, x.attrs['title'], linkify(x.attrs['href'])) for x in doc.select('span > a')]
+        url = linkify(doc.select_one('div > a').attrs['href'])
+        _docs.append(Doc(title, url, cover, tags, DOMAIN))
 
     return _docs
 
@@ -330,7 +339,6 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
         }
 
         response = requests.get(lurl, params=params, headers=headers)
-        pass
         return response2docs(response)
 
     docs = {}
