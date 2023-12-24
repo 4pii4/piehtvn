@@ -52,6 +52,16 @@ python backend.py
 
 [`/get-images?url=34611-64188-xem-truyen-sexual-manners-basics-and-principles-chap-1`](https://paste.ee/p/corus)
 </details>
+<br>
+
+<details>
+<summary><code>/download-image</code></summary>
+
+* Parameters:
+  * `url`: url of the image as returned by `get-images`
+* Return: the image (duh)
+
+</details>
 
 ## TODO
 * remove duplicate results in search/custom

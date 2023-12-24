@@ -1,6 +1,8 @@
 import dataclasses
 import json
+
 from bottle import Bottle, request, response
+
 from piehtvn import *
 
 
@@ -58,6 +60,15 @@ def main():
     def backend_get_images():
         chapter = Chapter(None, request.query.url.removeprefix('.html') + '.html', None, DOMAIN)
         return generate_response(chapter.get_images())
+
+    @app.route('/download-image')
+    def backend_download_image():
+        img = Image(request.query.url)
+        response.set_header("Access-Control-Allow-Origin", "*")
+        response.content_type = f'image/{img.url.split(".")[-1]}'
+        with requests.Session() as session:
+            resp = session.send(img.get_request().prepare())
+        return resp.content
 
     app.run(host=config['host'], port=config['port'], debug=config['debug'])
 

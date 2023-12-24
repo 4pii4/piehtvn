@@ -146,7 +146,7 @@ class Chapter(Base):
                 pr = sss.prepare_request(request=request)
                 return sss.send(request=pr).content
 
-        images = self.get_images()
+        images = [Image(x) for x in self.get_images()]
         finished = {}
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
