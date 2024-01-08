@@ -11,8 +11,6 @@ def main():
     with open('config.json') as f:
         config = json.loads(f.read())
 
-    setdomain(config['domain'])
-
     def generate_response(obj):
         class EnhancedJSONEncoder(json.JSONEncoder):
             def default(self, o):
@@ -69,6 +67,10 @@ def main():
         with requests.Session() as session:
             resp = session.send(img.get_request().prepare())
         return resp.content
+
+    @app.route('/reload')
+    def backend_reload():
+        return reload()
 
     app.run(host=config['host'], port=config['port'], debug=config['debug'])
 

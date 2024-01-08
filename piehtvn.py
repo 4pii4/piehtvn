@@ -5,6 +5,7 @@ import datetime
 import io
 import os
 import re
+import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,13 +14,15 @@ import requests
 import six
 from bs4 import BeautifulSoup
 
-DOMAIN = 'hentaivn.red' # actually read from config.json
+DOMAIN = 'hentaivn.red' # actually read remotely
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0'
 COMMON_HEADER = {
     "User-Agent": UA,
     "Accept-Language": "en-US,en;q=0.5",
     "Connection": "keep-alive",
 }
+
+last_reload = -1
 
 
 def timestamp(date: datetime) -> int:
@@ -43,6 +46,22 @@ def iterable(arg):
 def setdomain(newdomain):
     global DOMAIN
     DOMAIN = newdomain
+
+
+def reload():
+    global last_reload
+    if time.time() - last_reload > 30:
+        last_reload = time.time()
+        try:
+            resp = requests.get('https://raw.githubusercontent.com/SauceEnjoyer/htvn/main/remote_url')
+            new_domain = resp.text.strip()
+            setdomain(new_domain)
+            return f'updated domain: {new_domain}'
+        except Exception as e:
+            return f'failed to update domain: {e}'
+    else:
+        return f'reloading too quickly'
+
 
 
 def linkify(l):
