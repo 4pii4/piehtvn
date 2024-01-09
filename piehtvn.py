@@ -140,7 +140,7 @@ class Chapter(Base):
     def get_images(self) -> list[str]:
         headers = {
                       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                      'Referer': f'https://{self.domain}/{self.url}',
+                      'Referer': f'https://{self.domain}/{self.url}'.encode(),
                       'Upgrade-Insecure-Requests': '1',
                       'Sec-Fetch-Dest': 'document',
                       'Sec-Fetch-Mode': 'navigate',
@@ -149,7 +149,7 @@ class Chapter(Base):
                   } | COMMON_HEADER
 
         response = requests.get(
-            f'https://{self.domain}/{urllib.parse.quote(self.url)}',
+            f'https://{self.domain}/{urllib.parse.quote(self.url)}'.encode(),
             headers=headers,
             params={'ie': 'utf-8'}
         )
@@ -216,7 +216,7 @@ class Doc(Base):
     def get_chapters(self) -> list[Chapter]:
         headers = {
                       'Accept': '*/*',
-                      'Referer': f'https://{self.domain}/list-showchapter.php?idchapshow={self.get_id()}&idlinkanime={self.get_name()}',
+                      'Referer': f'https://{self.domain}/list-showchapter.php?idchapshow={self.get_id()}&idlinkanime={self.get_name()}'.encode(),
                       'Sec-Fetch-Dest': 'empty',
                       'Sec-Fetch-Mode': 'cors',
                       'Sec-Fetch-Site': 'same-origin',
@@ -228,7 +228,7 @@ class Doc(Base):
             'idlinkanime': self.get_name(),
         }
 
-        response = requests.get(f'https://{self.domain}/list-showchapter.php', params=params, headers=headers)
+        response = requests.get(f'https://{self.domain}/list-showchapter.php'.encode(), params=params, headers=headers)
         parser = BeautifulSoup(response.text, 'html.parser')
 
         tds = parser.select('tr > td')
@@ -344,7 +344,7 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
 
         headers = {
                       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                      'Referer': lurl,
+                      'Referer': lurl.encode(),
                       'Upgrade-Insecure-Requests': '1',
                       'Sec-Fetch-Dest': 'document',
                       'Sec-Fetch-Mode': 'navigate',
@@ -357,7 +357,7 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
             'page': page,
         }
 
-        response = requests.get(lurl, params=params, headers=headers)
+        response = requests.get(lurl.encode(), params=params, headers=headers)
         return response2docs(response)
 
     docs = {}
@@ -386,7 +386,7 @@ def search(query: str, pages: int = 1) -> dict[int:list[Doc]]:
                   } | COMMON_HEADER
 
         params = {
-            'key': query,
+            'key': query.encode(),
             'page': page,
         }
 
