@@ -1,5 +1,8 @@
 import dataclasses
 import json
+import logging
+from functools import wraps
+import datetime
 
 from bottle import Bottle, request, response
 
@@ -8,8 +11,27 @@ from piehtvn import *
 
 def main():
     app = Bottle()
+    logging.basicConfig(format='[%(levelname)s] [%(asctime)s] %(msg)s', level=logging.INFO)
+
     with open('config.json') as f:
         config = json.loads(f.read())
+
+    def log_to_logger(fn):
+        '''
+        Wrap a Bottle request so that a log line is emitted after it's handled.
+        (This decorator can be extended to take the desired logger as a param.)
+        '''
+        @wraps(fn)
+        def _log_to_logger(*args, **kwargs):
+            actual_response = fn(*args, **kwargs)
+            # modify this to log exactly what you need:
+            logging.info('%s %s %s %s' % (request.remote_addr,
+                                            request.method,
+                                            request.url,
+                                            response.status, ))
+            return actual_response
+        return _log_to_logger
+    app.install(log_to_logger)
 
     def generate_response(obj):
         class EnhancedJSONEncoder(json.JSONEncoder):
@@ -72,7 +94,9 @@ def main():
     def backend_reload():
         return reload()
 
-    app.run(host=config['host'], port=config['port'], debug=config['debug'])
+    logging.info(f"listening on {config['host']}:{config['port']}")
+
+    app.run(host=config['host'], port=config['port'], quiet=True)
 
 
 if __name__ == '__main__':
