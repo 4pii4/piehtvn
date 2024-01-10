@@ -44,6 +44,15 @@ def main():
         response.content_type = 'application/json'
         return json.dumps(obj, ensure_ascii=False, cls=EnhancedJSONEncoder)
 
+    @app.route('/')
+    def root():
+        return 'proper index page coming soon'
+
+    @app.route('/homepage')
+    def backend_homepage():
+        return generate_response(homepage())
+
+
     @app.route('/search')
     def backend_search():
         if request.query.query is None:

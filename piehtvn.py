@@ -42,6 +42,16 @@ def iterable(arg):
             and not isinstance(arg, six.string_types)
     )
 
+def parallel_map(lst, func) -> dict:
+    d = {}
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        f = {executor.submit(func, i): i for i in lst}
+        for future in concurrent.futures.as_completed(f):
+            k = f[future]
+            d[k] = future.result()
+    return d
+
+
 
 def setdomain(newdomain):
     global DOMAIN
@@ -166,14 +176,7 @@ class Chapter(Base):
                 return sss.send(request=pr).content
 
         images = [Image(x) for x in self.get_images()]
-        finished = {}
-
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_to_url = {executor.submit(download_image, image): image for image in images}
-            for future in concurrent.futures.as_completed(future_to_url):
-                image = future_to_url[future]
-                content = future.result()
-                finished[image] = content
+        finished = parallel_map(images, download_image)
 
         return finished
 
@@ -360,9 +363,9 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
         response = requests.get(lurl.encode(), params=params, headers=headers)
         return response2docs(response)
 
-    docs = {}
     r = list(range(1, pages + 1))
 
+    # todo: refactor this later
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future_to_url = {executor.submit(single_custom, url, page): page for page in r}
         for future in concurrent.futures.as_completed(future_to_url):
@@ -393,13 +396,69 @@ def search(query: str, pages: int = 1) -> dict[int:list[Doc]]:
         response = requests.get(f'https://{DOMAIN}/tim-kiem-truyen.html', params=params, headers=headers)
         return response2docs(response)
 
-    docs = {}
     r = list(range(1, pages + 1))
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        future_to_url = {executor.submit(single_search, page): page for page in r}
-        for future in concurrent.futures.as_completed(future_to_url):
-            page = future_to_url[future]
-            docs[page] = future.result()
-
+    docs = parallel_map(r, single_search)
+    
     return docs
+
+
+def homepage() -> dict[str:list[Doc]]:
+    def get_trending() -> list[Doc]:
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/jxl,image/webp,*/*;q=0.8',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'cross-site',
+            'Sec-GPC': '1',
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache',
+        } | COMMON_HEADER
+
+        response = requests.get(f'https://{DOMAIN}/', headers=headers)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        trending = []
+        for t in soup.select('#myDIV > ul > li'):
+            namelink = t.select_one('.box-description')
+            cover = re.sub(r'.*:url\(([^)]*)\);.*', r'\1',t.select_one('li > div > a > div')['style'])
+            name = namelink.select_one('h2').text
+            link = linkify(namelink.select_one('a')['href'])
+            trending.append(Doc(name, link, cover, [], DOMAIN))
+        return trending
+
+    def get_recent() -> list[Doc]:
+        cookies = {
+            'tataxoff': '1',
+        }
+
+        headers = {
+            'Accept': '*/*',
+            'Referer': f'https://{DOMAIN}/list-moicapnhat-doc.php',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-GPC': '1',
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache',
+        } | COMMON_HEADER
+
+        response = requests.get(f'https://{DOMAIN}/list-moicapnhat-doc.php', cookies=cookies, headers=headers)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        recent = []
+        for t in soup.select('.item > ul'):
+            link = linkify(t.select_one('a')['href'])
+            name = t.select_one('span > a > h2').text
+            cover = t.select_one('img')['src']
+            recent.append(Doc(name, link, cover, [], DOMAIN))
+        return recent
+
+    def work(worktype: str) -> list[Doc]:
+        if worktype == 'trending':
+            return get_trending()
+        elif worktype == 'recent':
+            return get_recent()
+
+    tasks = ['trending', 'recent']
+    results = parallel_map(tasks, work)
+
+    return results
