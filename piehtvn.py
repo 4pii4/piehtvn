@@ -72,7 +72,7 @@ def reload():
     if time.time() - last_reload > 30:
         last_reload = time.time()
         set_domain()
-        return 'Reloaded'
+        return f'Reloaded, the domain is now {DOMAIN}'
     else:
         return 'Reloading too quickly'
 
