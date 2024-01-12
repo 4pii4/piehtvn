@@ -9,6 +9,7 @@ import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
+from urllib.parse import urlparse
 
 import requests
 import six
@@ -25,13 +26,35 @@ last_reload = -1
 DOMAIN = None # Set to None initially
 
 
+def is_valid_url(url):
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
+
 def get_domain():
     try:
         resp = requests.get('https://raw.githubusercontent.com/SauceEnjoyer/htvn/main/remote_url')
-        return resp.text.strip()
+        remote_url_content = resp.text.strip()
+        if is_valid_url(remote_url_content):
+            print('Successfully retrieved domain from remote Git repository.')
+            return remote_url_content
     except Exception as e:
-        print(f'Failed to fetch domain: {e}')
-        return None
+        print(f'Failed to fetch domain from remote URL: {e}')
+    try:
+        with open('fallback_url.txt', 'r') as file:
+            fallback_url_content = file.read().strip()
+            if is_valid_url(fallback_url_content):
+                return fallback_url_content
+                print('Remote Git repository retrieval failed, but successfully retrieved domain from a fallback text file containing the URL.')
+            else:
+                print('Fallback content is not a valid URL.')
+    except FileNotFoundError:
+        print('Fallback file (fallback_url.txt) not found.')
+    except Exception as e:
+        print(f'Error reading fallback file: {e}')
+    return None
 
 
 def set_domain():
