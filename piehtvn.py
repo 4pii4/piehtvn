@@ -9,12 +9,12 @@ import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
+from urllib.parse import urlparse
 
 import requests
 import six
 from bs4 import BeautifulSoup
 
-DOMAIN = 'hentaivn.red' # actually read remotely
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0'
 COMMON_HEADER = {
     "User-Agent": UA,
@@ -23,6 +23,58 @@ COMMON_HEADER = {
 }
 
 last_reload = -1
+DOMAIN = None # Set to None initially
+
+
+def is_valid_url(url):
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
+
+def get_domain():
+    try:
+        resp = requests.get('https://raw.githubusercontent.com/SauceEnjoyer/htvn/main/remote_url')
+        remote_url_content = resp.text.strip()
+        if is_valid_url(remote_url_content):
+            print('Successfully retrieved domain from remote Git repository.')
+            return remote_url_content
+    except Exception as e:
+        print(f'Failed to fetch domain from remote URL: {e}')
+    try:
+        with open('fallback_url.txt', 'r') as file:
+            fallback_url_content = file.read().strip()
+            if is_valid_url(fallback_url_content):
+                return fallback_url_content
+                print('Remote Git repository retrieval failed, but successfully retrieved domain from a fallback text file containing the URL.')
+            else:
+                print('Fallback content is not a valid URL.')
+    except FileNotFoundError:
+        print('Fallback file (fallback_url.txt) not found.')
+    except Exception as e:
+        print(f'Error reading fallback file: {e}')
+    return None
+
+
+def set_domain():
+    global DOMAIN
+    new_domain = get_domain()
+    if new_domain:
+        DOMAIN = new_domain
+        print(f'Updated domain: {DOMAIN}')
+    else:
+        print('Using default domain.')
+
+
+def reload():
+    global last_reload
+    if time.time() - last_reload > 30:
+        last_reload = time.time()
+        set_domain()
+        return 'Reloaded'
+    else:
+        return 'Reloading too quickly'
 
 
 def timestamp(date: datetime) -> int:
@@ -52,31 +104,10 @@ def parallel_map(lst, func) -> dict:
     return d
 
 
-
-def setdomain(newdomain):
-    global DOMAIN
-    DOMAIN = newdomain
-
-
-def reload():
-    global last_reload
-    if time.time() - last_reload > 30:
-        last_reload = time.time()
-        try:
-            resp = requests.get('https://raw.githubusercontent.com/SauceEnjoyer/htvn/main/remote_url')
-            new_domain = resp.text.strip()
-            setdomain(new_domain)
-            return f'updated domain: {new_domain}'
-        except Exception as e:
-            return f'failed to update domain: {e}'
-    else:
-        return f'reloading too quickly'
-
-
-
 def linkify(l):
     return l.removeprefix('/').removesuffix('.html')
 
+set_domain()
 
 class Base:
     @staticmethod
