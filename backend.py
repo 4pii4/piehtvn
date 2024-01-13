@@ -3,6 +3,7 @@ import json
 import logging
 from functools import wraps
 import datetime
+from domain import Domain
 
 from bottle import Bottle, request, response
 
@@ -11,7 +12,6 @@ from piehtvn import *
 
 def main():
     app = Bottle()
-    logging.basicConfig(format='[%(levelname)s] [%(asctime)s] %(msg)s', level=logging.INFO)
 
     with open('config.json') as f:
         config = json.loads(f.read())
@@ -31,7 +31,6 @@ def main():
                                             response.status, ))
             return actual_response
         return _log_to_logger
-    app.install(log_to_logger)
 
     def generate_response(obj):
         class EnhancedJSONEncoder(json.JSONEncoder):
@@ -68,26 +67,26 @@ def main():
             return 'missing url parameter'
 
         pages = int(request.query.pages or 1)
-        url = f'https://{DOMAIN}/{request.query.url}'
+        url = f'https://{Domain.get_domain()}/{request.query.url}'
 
         return generate_response(custom_url(url, pages))
 
     # noinspection PyTypeChecker
     @app.route('/get-chapters')
     def backend_get_chapters():
-        doc = Doc(None, request.query.url, None, None, DOMAIN)
+        doc = Doc(None, request.query.url, None, None, Domain.get_domain())
         return generate_response(doc.get_chapters())
 
     # noinspection PyTypeChecker
     @app.route('/get-metadata')
     def backend_get_chapter_metadata():
-        doc = Doc(None, request.query.url.removeprefix('.html') + '.html', None, None, DOMAIN)
+        doc = Doc(None, request.query.url.removeprefix('.html') + '.html', None, None, Domain.get_domain())
         return generate_response(doc.get_metadata())
 
     # noinspection PyTypeChecker
     @app.route('/get-images')
     def backend_get_images():
-        chapter = Chapter(None, request.query.url.removeprefix('.html') + '.html', None, DOMAIN)
+        chapter = Chapter(None, request.query.url.removeprefix('.html') + '.html', None, Domain.get_domain())
         return generate_response(chapter.get_images())
 
     @app.route('/download-image')
@@ -103,8 +102,13 @@ def main():
     def backend_reload():
         return reload()
 
-    logging.info(f"listening on {config['host']}:{config['port']}")
+    @app.route('/domain')
+    def backend_domain():
+        return Domain.get_domain()
 
+    logging.basicConfig(format='[%(levelname)s] [%(asctime)s] %(msg)s', level=logging.INFO)
+    logging.info(f"listening on {config['host']}:{config['port']}")
+    app.install(log_to_logger)
     app.run(host=config['host'], port=config['port'], quiet=True)
 
 

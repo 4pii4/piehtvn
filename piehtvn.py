@@ -9,7 +9,7 @@ import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import urlparse
+from domain import Domain
 
 import requests
 import six
@@ -23,58 +23,16 @@ COMMON_HEADER = {
 }
 
 last_reload = -1
-DOMAIN = None # Set to None initially
-
-
-def is_valid_url(url):
-    try:
-        result = urlparse(url)
-        return all([result.scheme, result.netloc])
-    except ValueError:
-        return False
-
-def get_domain():
-    try:
-        resp = requests.get('https://raw.githubusercontent.com/SauceEnjoyer/htvn/main/remote_url')
-        remote_url_content = resp.text.strip()
-        if is_valid_url(remote_url_content):
-            print('Successfully retrieved domain from remote Git repository.')
-            return remote_url_content
-    except Exception as e:
-        print(f'Failed to fetch domain from remote URL: {e}')
-    try:
-        with open('fallback_url.txt', 'r') as file:
-            fallback_url_content = file.read().strip()
-            if is_valid_url(fallback_url_content):
-                return fallback_url_content
-                print('Remote Git repository retrieval failed, but successfully retrieved domain from a fallback text file containing the URL.')
-            else:
-                print('Fallback content is not a valid URL.')
-    except FileNotFoundError:
-        print('Fallback file (fallback_url.txt) not found.')
-    except Exception as e:
-        print(f'Error reading fallback file: {e}')
-    return None
-
-
-def set_domain():
-    global DOMAIN
-    new_domain = get_domain()
-    if new_domain:
-        DOMAIN = new_domain
-        print(f'Updated domain: {DOMAIN}')
-    else:
-        print('Using default domain.')
 
 
 def reload():
     global last_reload
     if time.time() - last_reload > 30:
         last_reload = time.time()
-        set_domain()
-        return f'Reloaded, the domain is now {DOMAIN}'
+        # do all the reloading here
+        return Domain.update_domain()
     else:
-        return 'Reloading too quickly'
+        return 'reloading too fast'
 
 
 def timestamp(date: datetime) -> int:
@@ -107,7 +65,6 @@ def parallel_map(lst, func) -> dict:
 def linkify(l):
     return l.removeprefix('/').removesuffix('.html')
 
-set_domain()
 
 class Base:
     @staticmethod
@@ -181,7 +138,7 @@ class Chapter(Base):
     def get_images(self) -> list[str]:
         headers = {
                       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                      'Referer': f'https://{self.domain}/{self.url}'.encode(),
+                      'Referer': f'https://{Domain.get_domain()}/{self.url}'.encode(),
                       'Upgrade-Insecure-Requests': '1',
                       'Sec-Fetch-Dest': 'document',
                       'Sec-Fetch-Mode': 'navigate',
@@ -190,7 +147,7 @@ class Chapter(Base):
                   } | COMMON_HEADER
 
         response = requests.get(
-            f'https://{self.domain}/{urllib.parse.quote(self.url)}'.encode(),
+            f'https://{Domain.get_domain()}/{urllib.parse.quote(self.url)}'.encode(),
             headers=headers,
             params={'ie': 'utf-8'}
         )
@@ -250,7 +207,7 @@ class Doc(Base):
     def get_chapters(self) -> list[Chapter]:
         headers = {
                       'Accept': '*/*',
-                      'Referer': f'https://{self.domain}/list-showchapter.php?idchapshow={self.get_id()}&idlinkanime={self.get_name()}'.encode(),
+                      'Referer': f'https://{Domain.get_domain()}/list-showchapter.php?idchapshow={self.get_id()}&idlinkanime={self.get_name()}'.encode(),
                       'Sec-Fetch-Dest': 'empty',
                       'Sec-Fetch-Mode': 'cors',
                       'Sec-Fetch-Site': 'same-origin',
@@ -262,7 +219,7 @@ class Doc(Base):
             'idlinkanime': self.get_name(),
         }
 
-        response = requests.get(f'https://{self.domain}/list-showchapter.php'.encode(), params=params, headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/list-showchapter.php'.encode(), params=params, headers=headers)
         parser = BeautifulSoup(response.text, 'html.parser')
 
         tds = parser.select('tr > td')
@@ -275,7 +232,7 @@ class Doc(Base):
             title = main.select_one('td > a > h2').text
             link = linkify(main.select_one('td > a').attrs['href'])
 
-            chapters.append(Chapter(title, link, timestamp(date), self.domain))
+            chapters.append(Chapter(title, link, timestamp(date), Domain.get_domain()))
 
         return chapters
 
@@ -313,14 +270,14 @@ class Doc(Base):
             parent.doujinshi = element.parent.find('a').text
 
         headers = {
-                      'Referer': f'https://{self.domain}/${self.url}'.encode(),
+                      'Referer': f'https://{Domain.get_domain()}/${self.url}'.encode(),
                       'Sec-Fetch-Dest': 'document',
                       'Sec-Fetch-Mode': 'navigate',
                       'Sec-Fetch-Site': 'same-origin',
                       'Sec-GPC': '1',
                   } | COMMON_HEADER
 
-        response = requests.get(f'https://{self.domain}/{self.url}'.encode(), headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/{self.url}'.encode(), headers=headers)
 
         handlers = {
             "Tên Khác": handle_other_names,
@@ -367,7 +324,7 @@ def response2docs(response: requests.Response) -> list[Doc]:
         cover = doc.select_one('img').attrs['data-src']
         tags = [Tag(x.text, x.attrs['title'], linkify(x.attrs['href'])) for x in doc.select('span > a')]
         url = linkify(doc.select_one('div > a').attrs['href'])
-        _docs.append(Doc(title, url, cover, tags, DOMAIN))
+        _docs.append(Doc(title, url, cover, tags, Domain.get_domain()))
 
     return _docs
 
@@ -424,7 +381,7 @@ def search(query: str, pages: int = 1) -> dict[int:list[Doc]]:
             'page': page,
         }
 
-        response = requests.get(f'https://{DOMAIN}/tim-kiem-truyen.html', params=params, headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/tim-kiem-truyen.html', params=params, headers=headers)
         return response2docs(response)
 
     r = list(range(1, pages + 1))
@@ -446,7 +403,7 @@ def homepage() -> dict[str:list[Doc]]:
             'Cache-Control': 'no-cache',
         } | COMMON_HEADER
 
-        response = requests.get(f'https://{DOMAIN}/', headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/', headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
         trending = []
         for t in soup.select('#myDIV > ul > li'):
@@ -454,7 +411,7 @@ def homepage() -> dict[str:list[Doc]]:
             cover = re.sub(r'.*:url\(([^)]*)\);.*', r'\1',t.select_one('li > div > a > div')['style'])
             name = namelink.select_one('h2').text
             link = linkify(namelink.select_one('a')['href'])
-            trending.append(Doc(name, link, cover, [], DOMAIN))
+            trending.append(Doc(name, link, cover, [], Domain.get_domain()))
         return trending
 
     def get_recent() -> list[Doc]:
@@ -464,7 +421,7 @@ def homepage() -> dict[str:list[Doc]]:
 
         headers = {
             'Accept': '*/*',
-            'Referer': f'https://{DOMAIN}/list-moicapnhat-doc.php',
+            'Referer': f'https://{Domain.get_domain()}/list-moicapnhat-doc.php',
             'Sec-Fetch-Dest': 'empty',
             'Sec-Fetch-Mode': 'cors',
             'Sec-Fetch-Site': 'same-origin',
@@ -473,14 +430,14 @@ def homepage() -> dict[str:list[Doc]]:
             'Cache-Control': 'no-cache',
         } | COMMON_HEADER
 
-        response = requests.get(f'https://{DOMAIN}/list-moicapnhat-doc.php', cookies=cookies, headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/list-moicapnhat-doc.php', cookies=cookies, headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
         recent = []
         for t in soup.select('.item > ul'):
             link = linkify(t.select_one('a')['href'])
             name = t.select_one('span > a > h2').text
             cover = t.select_one('img')['src']
-            recent.append(Doc(name, link, cover, [], DOMAIN))
+            recent.append(Doc(name, link, cover, [], Domain.get_domain()))
         return recent
 
     def work(worktype: str) -> list[Doc]:
