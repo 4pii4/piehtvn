@@ -54,7 +54,7 @@ def main():
             osver = subprocess.check_output(['cmd.exe', '/c', 'ver']).decode('utf-8')
         else:
             osver = subprocess.check_output(['uname', '-s']).decode('utf-8') + ' ' + subprocess.check_output(['uname', '-r']).decode('utf-8')
-        return '<title>Welcome to PieHTVN</title><h1>Welcome to <a href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as ' + output + ' on ' + osver + '</p>\n<p>Current git commit: <a href="https://github.com/4pii4/piehtvn/commit/' + commitid + '">' + commitid_short + '</a>'
+        return '<title>Welcome to PieHTVN</title><h1>Welcome to <a href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as <b>' + output + '</b> on <b>' + osver + '</b></p>\n<p>Current git commit: <b><a href="https://github.com/4pii4/piehtvn/commit/' + commitid + '">' + commitid_short + '</a></b></p>'
 
     @app.route('/homepage')
     def backend_homepage():
