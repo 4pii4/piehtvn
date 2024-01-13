@@ -4,7 +4,7 @@ import logging
 import platform
 import subprocess
 from functools import wraps
-import datetime
+from datetime import timedelta
 from domain import Domain
 
 from bottle import Bottle, request, response
@@ -13,6 +13,8 @@ from piehtvn import *
 
 
 def main():
+
+    start_time = time.time()
 
     output = subprocess.check_output(['whoami']).decode('utf-8')
     commitid = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8')
@@ -56,9 +58,17 @@ def main():
         response.content_type = 'application/json'
         return json.dumps(obj, ensure_ascii=False, cls=EnhancedJSONEncoder)
 
+    def uptime_calculate():
+        return str(timedelta(seconds=round(time.time()) - round(start_time)))
+
     @app.route('/')
     def root():
-        return '<title>Welcome to PieHTVN</title><h1>Welcome to <a href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as <b>' + output + '</b> on <b>' + osver + '</b></p>\n<p>Current git commit: <b><a href="https://github.com/4pii4/piehtvn/commit/' + commitid + '">' + commitid_short + '</a></b></p>\n<p>Current pointed domain: <b>' + Domain.get_domain() + '</b></p>'
+        return (('<title>Welcome to PieHTVN</title><h1>Welcome to <a '
+                'href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as <b>') + output +
+                '</b> on <b>' + osver + '</b></p>\n<p>Current git commit: <b><a '
+                                        'href="https://github.com/4pii4/piehtvn/commit/' + commitid + '">' +
+                commitid_short + '</a></b></p>\n<p>Current pointed domain: <b>' + Domain.get_domain() +
+                '</b></p>\nUptime: <b>' + uptime_calculate() + '</b>')
 
     @app.route('/homepage')
     def backend_homepage():
