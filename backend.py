@@ -13,6 +13,17 @@ from piehtvn import *
 
 
 def main():
+
+    output = subprocess.check_output(['whoami']).decode('utf-8')
+    commitid = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8')
+    commitid_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')
+    if platform.system() == 'Windows':
+        platformwin = platform.win32_ver()
+        osver = 'Windows version ' + platformwin[1]
+    else:
+        osver = subprocess.check_output(['uname', '-s']).decode('utf-8') + ' ' + subprocess.check_output(
+            ['uname', '-r']).decode('utf-8')
+
     app = Bottle()
 
     with open('config.json') as f:
@@ -47,14 +58,7 @@ def main():
 
     @app.route('/')
     def root():
-        output = subprocess.check_output(['whoami']).decode('utf-8')
-        commitid = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8')
-        commitid_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')
-        if platform.system() == 'Windows':
-            osver = subprocess.check_output(['cmd.exe', '/c', 'ver']).decode('utf-8')
-        else:
-            osver = subprocess.check_output(['uname', '-s']).decode('utf-8') + ' ' + subprocess.check_output(['uname', '-r']).decode('utf-8')
-        return '<title>Welcome to PieHTVN</title><h1>Welcome to <a href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as <b>' + output + '</b> on <b>' + osver + '</b></p>\n<p>Current git commit: <b><a href="https://github.com/4pii4/piehtvn/commit/' + commitid + '">' + commitid_short + '</a></b></p>'
+        return '<title>Welcome to PieHTVN</title><h1>Welcome to <a href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as <b>' + output + '</b> on <b>' + osver + '</b></p>\n<p>Current git commit: <b><a href="https://github.com/4pii4/piehtvn/commit/' + commitid + '">' + commitid_short + '</a></b></p>\n<p>Current pointed domain: <b>' + Domain.get_domain() + '</b></p>'
 
     @app.route('/homepage')
     def backend_homepage():
