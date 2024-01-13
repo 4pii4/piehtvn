@@ -1,6 +1,8 @@
 import dataclasses
 import json
 import logging
+import platform
+import subprocess
 from functools import wraps
 import datetime
 from domain import Domain
@@ -45,7 +47,14 @@ def main():
 
     @app.route('/')
     def root():
-        return 'proper index page coming soon'
+        output = subprocess.check_output(['whoami']).decode('utf-8')
+        commitid = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8')
+        commitid_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')
+        if platform.system() == 'Windows':
+            osver = subprocess.check_output(['cmd.exe', '/c', 'ver']).decode('utf-8')
+        else:
+            osver = subprocess.check_output(['uname', '-s']).decode('utf-8') + ' ' + subprocess.check_output(['uname', '-r']).decode('utf-8')
+        return '<title>Welcome to PieHTVN</title><h1>Welcome to <a href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as ' + output + ' on ' + osver + '</p>\n<p>Current git commit: <a href="https://github.com/4pii4/piehtvn/commit/' + commitid + '">' + commitid_short + '</a>'
 
     @app.route('/homepage')
     def backend_homepage():

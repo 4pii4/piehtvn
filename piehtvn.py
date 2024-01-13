@@ -30,9 +30,9 @@ def reload():
     if time.time() - last_reload > 30:
         last_reload = time.time()
         # do all the reloading here
-        return Domain.update_domain()
+        return '<title>Domain updated!</title><p>Successfully updated domain to ' + Domain.update_domain() + '</p>'
     else:
-        return 'reloading too fast'
+        return '<title>Domain not updated!</title><p>Rate-limited due to too many requests. Please wait in ' + str(int(30 - (time.time() - last_reload))) + ' seconds.</p>'
 
 
 def timestamp(date: datetime) -> int:
