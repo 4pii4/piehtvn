@@ -109,8 +109,9 @@ def main():
     # noinspection PyTypeChecker
     @app.route('/get-images')
     def backend_get_images():
+        cdn = request.query.cdn or 'default'
         chapter = Chapter(None, request.query.url.removeprefix('.html') + '.html', None, Domain.get_domain())
-        return generate_response(chapter.get_images())
+        return generate_response(chapter.get_images(cdn))
 
     @app.route('/download-image')
     def backend_download_image():

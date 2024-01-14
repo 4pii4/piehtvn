@@ -135,26 +135,65 @@ class Chapter(Base):
     time: int
     domain: str
 
-    def get_images(self) -> list[str]:
-        headers = {
-                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                      'Referer': f'https://{Domain.get_domain()}/{self.url}'.encode(),
-                      'Upgrade-Insecure-Requests': '1',
-                      'Sec-Fetch-Dest': 'document',
-                      'Sec-Fetch-Mode': 'navigate',
-                      'Sec-Fetch-Site': 'same-origin',
-                      'Sec-GPC': '1',
-                  } | COMMON_HEADER
+    def get_id(self) -> int:
+        return int(self.url.split('-')[1])
 
-        response = requests.get(
-            f'https://{Domain.get_domain()}/{urllib.parse.quote(self.url)}'.encode(),
-            headers=headers,
-            params={'ie': 'utf-8'}
-        )
 
-        parser = BeautifulSoup(response.text, 'html.parser')
-        pattern = re.compile(r'\?imgmax=[0-9]*$')
-        return [re.sub(pattern, '', img.attrs['data-src']) for img in parser.select('img.lazyload')]
+    def get_images(self, cdn) -> list[str]:
+        def default_cdn() -> list[str]:
+            headers = {
+                          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                          'Referer': f'https://{Domain.get_domain()}/{self.url}'.encode(),
+                          'Upgrade-Insecure-Requests': '1',
+                          'Sec-Fetch-Dest': 'document',
+                          'Sec-Fetch-Mode': 'navigate',
+                          'Sec-Fetch-Site': 'same-origin',
+                          'Sec-GPC': '1',
+                      } | COMMON_HEADER
+
+            response = requests.get(
+                f'https://{Domain.get_domain()}/{urllib.parse.quote(self.url)}'.encode(),
+                headers=headers,
+                params={'ie': 'utf-8'}
+            )
+
+            parser = BeautifulSoup(response.text, 'html.parser')
+            pattern = re.compile(r'\?imgmax=[0-9]*$')
+            return [re.sub(pattern, '', img.attrs['data-src']) for img in parser.select('img.lazyload')]
+
+        def custom_cdn(n: int) -> list[str]:
+            headers = {
+                'Accept': '*/*',
+                'Referer': f'https://{Domain.get_domain()}/ajax_load_server.php',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Origin': f'https://{Domain.get_domain()}',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+            } | COMMON_HEADER
+
+            data = {
+                'server_id': self.get_id(),
+                'server_type': str(n),
+            }
+
+            response = requests.post(f'https://{Domain.get_domain()}/ajax_load_server.php', headers=headers, data=data)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            pattern = re.compile(r'\?imgmax=[0-9]*$')
+            return [re.sub(pattern, '', img['src']) for img in soup.select('img')]
+
+        def work(worktype: str) -> list[str]:
+            if worktype == 'default':
+                return default_cdn()
+            elif re.match('cdn[12]', worktype):
+                return custom_cdn(int(worktype.removeprefix('cdn')))
+            else:
+                return []
+
+        return parallel_map(['default', 'cdn1', 'cdn2'], work)
+
+            
 
     def download_all_images(self) -> dict[Image:io.BytesIO]:
         def download_image(image: Image) -> bytes:
