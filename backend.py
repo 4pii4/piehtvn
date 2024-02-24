@@ -13,7 +13,6 @@ from piehtvn import *
 
 
 def main():
-
     start_time = time.time()
 
     output = subprocess.check_output(['whoami']).decode('utf-8')
@@ -36,15 +35,17 @@ def main():
         Wrap a Bottle request so that a log line is emitted after it's handled.
         (This decorator can be extended to take the desired logger as a param.)
         '''
+
         @wraps(fn)
         def _log_to_logger(*args, **kwargs):
             actual_response = fn(*args, **kwargs)
             # modify this to log exactly what you need:
             logging.info('%s %s %s %s' % (request.remote_addr,
-                                            request.method,
-                                            request.url,
-                                            response.status, ))
+                                          request.method,
+                                          request.url,
+                                          response.status,))
             return actual_response
+
         return _log_to_logger
 
     def generate_response(obj):
@@ -64,7 +65,7 @@ def main():
     @app.route('/')
     def root():
         return (('<title>Welcome to PieHTVN</title><h1>Welcome to <a '
-                'href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as <b>') + output +
+                 'href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as <b>') + output +
                 '</b> on <b>' + osver + '</b></p>\n<p>Current git commit: <b><a '
                                         'href="https://github.com/4pii4/piehtvn/commit/' + commitid + '">' +
                 commitid_short + '</a></b></p>\n<p>Current pointed domain: <b>' + Domain.get_domain() +
@@ -73,7 +74,6 @@ def main():
     @app.route('/homepage')
     def backend_homepage():
         return generate_response(homepage())
-
 
     @app.route('/search')
     def backend_search():

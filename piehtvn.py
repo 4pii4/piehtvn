@@ -30,9 +30,9 @@ def reload():
     if time.time() - last_reload > 30:
         last_reload = time.time()
         # do all the reloading here
-        return '<title>Domain updated!</title><p>Successfully updated domain to ' + Domain.update_domain() + '</p>'
+        return f'<title>Domain updated!</title><p>Successfully updated domain to {Domain.update_domain()}</p>'
     else:
-        return '<title>Domain not updated!</title><p>Rate-limited due to too many requests. Please wait in ' + str(int(30 - (time.time() - last_reload))) + ' seconds.</p>'
+        return f'<title>Domain not updated!</title><p>Rate-limited due to too many requests. Please wait {int(30 - (time.time() - last_reload))} seconds.</p> '
 
 
 def timestamp(date: datetime) -> int:
@@ -52,6 +52,7 @@ def iterable(arg):
             and not isinstance(arg, six.string_types)
     )
 
+
 def parallel_map(lst, func) -> dict:
     d = {}
     with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -62,8 +63,8 @@ def parallel_map(lst, func) -> dict:
     return d
 
 
-def linkify(l):
-    return l.removeprefix('/').removesuffix('.html')
+def linkify(txt):
+    return txt.removeprefix('/').removesuffix('.html')
 
 
 class Base:
@@ -138,8 +139,7 @@ class Chapter(Base):
     def get_id(self) -> int:
         return int(self.url.split('-')[1])
 
-
-    def get_images(self, cdn) -> list[str]:
+    def get_images(self) -> dict:
         def default_cdn() -> list[str]:
             headers = {
                           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -163,15 +163,15 @@ class Chapter(Base):
 
         def custom_cdn(n: int) -> list[str]:
             headers = {
-                'Accept': '*/*',
-                'Referer': f'https://{Domain.get_domain()}/ajax_load_server.php',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest',
-                'Origin': f'https://{Domain.get_domain()}',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-            } | COMMON_HEADER
+                          'Accept': '*/*',
+                          'Referer': f'https://{Domain.get_domain()}/ajax_load_server.php',
+                          'Content-Type': 'application/x-www-form-urlencoded',
+                          'X-Requested-With': 'XMLHttpRequest',
+                          'Origin': f'https://{Domain.get_domain()}',
+                          'Sec-Fetch-Dest': 'empty',
+                          'Sec-Fetch-Mode': 'cors',
+                          'Sec-Fetch-Site': 'same-origin',
+                      } | COMMON_HEADER
 
             data = {
                 'server_id': self.get_id(),
@@ -192,8 +192,6 @@ class Chapter(Base):
                 return []
 
         return parallel_map(['default', 'cdn1', 'cdn2'], work)
-
-            
 
     def download_all_images(self) -> dict[Image:io.BytesIO]:
         def download_image(image: Image) -> bytes:
@@ -258,7 +256,8 @@ class Doc(Base):
             'idlinkanime': self.get_name(),
         }
 
-        response = requests.get(f'https://{Domain.get_domain()}/list-showchapter.php'.encode(), params=params, headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/list-showchapter.php'.encode(), params=params,
+                                headers=headers)
         parser = BeautifulSoup(response.text, 'html.parser')
 
         tds = parser.select('tr > td')
@@ -392,6 +391,8 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
 
     r = list(range(1, pages + 1))
 
+    docs = {}
+
     # todo: refactor this later
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future_to_url = {executor.submit(single_custom, url, page): page for page in r}
@@ -425,29 +426,29 @@ def search(query: str, pages: int = 1) -> dict[int:list[Doc]]:
 
     r = list(range(1, pages + 1))
     docs = parallel_map(r, single_search)
-    
+
     return docs
 
 
 def homepage() -> dict[str:list[Doc]]:
     def get_trending() -> list[Doc]:
         headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/jxl,image/webp,*/*;q=0.8',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'cross-site',
-            'Sec-GPC': '1',
-            'Pragma': 'no-cache',
-            'Cache-Control': 'no-cache',
-        } | COMMON_HEADER
+                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/jxl,image/webp,*/*;q=0.8',
+                      'Upgrade-Insecure-Requests': '1',
+                      'Sec-Fetch-Dest': 'document',
+                      'Sec-Fetch-Mode': 'navigate',
+                      'Sec-Fetch-Site': 'cross-site',
+                      'Sec-GPC': '1',
+                      'Pragma': 'no-cache',
+                      'Cache-Control': 'no-cache',
+                  } | COMMON_HEADER
 
         response = requests.get(f'https://{Domain.get_domain()}/', headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
         trending = []
         for t in soup.select('#myDIV > ul > li'):
             namelink = t.select_one('.box-description')
-            cover = re.sub(r'.*:url\(([^)]*)\);.*', r'\1',t.select_one('li > div > a > div')['style'])
+            cover = re.sub(r'.*:url\(([^)]*)\);.*', r'\1', t.select_one('li > div > a > div')['style'])
             name = namelink.select_one('h2').text
             link = linkify(namelink.select_one('a')['href'])
             trending.append(Doc(name, link, cover, [], Domain.get_domain()))
@@ -459,17 +460,18 @@ def homepage() -> dict[str:list[Doc]]:
         }
 
         headers = {
-            'Accept': '*/*',
-            'Referer': f'https://{Domain.get_domain()}/list-moicapnhat-doc.php',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-GPC': '1',
-            'Pragma': 'no-cache',
-            'Cache-Control': 'no-cache',
-        } | COMMON_HEADER
+                      'Accept': '*/*',
+                      'Referer': f'https://{Domain.get_domain()}/list-moicapnhat-doc.php',
+                      'Sec-Fetch-Dest': 'empty',
+                      'Sec-Fetch-Mode': 'cors',
+                      'Sec-Fetch-Site': 'same-origin',
+                      'Sec-GPC': '1',
+                      'Pragma': 'no-cache',
+                      'Cache-Control': 'no-cache',
+                  } | COMMON_HEADER
 
-        response = requests.get(f'https://{Domain.get_domain()}/list-moicapnhat-doc.php', cookies=cookies, headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/list-moicapnhat-doc.php', cookies=cookies,
+                                headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
         recent = []
         for t in soup.select('.item > ul'):

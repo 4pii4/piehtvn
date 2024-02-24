@@ -4,6 +4,7 @@ import logging
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0'
 
+
 class Domain:
     domain: str = None
 
@@ -26,14 +27,12 @@ class Domain:
         except Exception as e:
             pass
 
-
     @staticmethod
     def get_first_domain():
         for sr in Domain.get_remote_sources():
             r = Domain.test_remote_source(sr)
             if r is not None:
                 return r
-
 
     @staticmethod
     def update_domain():
@@ -42,7 +41,6 @@ class Domain:
 
     @staticmethod
     def get_domain():
-        if Domain.domain == None:
+        if Domain.domain is None:
             Domain.update_domain()
         return Domain.domain
-
