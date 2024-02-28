@@ -3,9 +3,8 @@ import json
 import logging
 import platform
 import subprocess
-from functools import wraps
 from datetime import timedelta
-from domain import Domain
+from functools import wraps
 
 from bottle import Bottle, request, response
 
@@ -31,11 +30,6 @@ def main():
         config = json.loads(f.read())
 
     def log_to_logger(fn):
-        '''
-        Wrap a Bottle request so that a log line is emitted after it's handled.
-        (This decorator can be extended to take the desired logger as a param.)
-        '''
-
         @wraps(fn)
         def _log_to_logger(*args, **kwargs):
             actual_response = fn(*args, **kwargs)
@@ -80,9 +74,9 @@ def main():
         if request.query.query is None:
             return 'missing query parameter'
         query = request.query.query
-        pages = int(request.query.pages or 1)
+        page = int(request.query.page or 1)
 
-        return generate_response(search(query, pages))
+        return generate_response(search(query, page))
 
     @app.route('/custom')
     def backend_search():
@@ -109,9 +103,8 @@ def main():
     # noinspection PyTypeChecker
     @app.route('/get-images')
     def backend_get_images():
-        cdn = request.query.cdn or 'default'
         chapter = Chapter(None, request.query.url.removeprefix('.html') + '.html', None, Domain.get_domain())
-        return generate_response(chapter.get_images(cdn))
+        return generate_response(chapter.get_images())
 
     @app.route('/download-image')
     def backend_download_image():

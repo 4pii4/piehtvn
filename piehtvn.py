@@ -32,7 +32,8 @@ def reload():
         # do all the reloading here
         return f'<title>Domain updated!</title><p>Successfully updated domain to {Domain.update_domain()}</p>'
     else:
-        return f'<title>Domain not updated!</title><p>Rate-limited due to too many requests. Please wait {int(30 - (time.time() - last_reload))} seconds.</p> '
+        return f'<title>Domain not updated!</title><p>Rate-limited due to too many requests. ' + \
+               'Please wait {int(30 - (time.time() - last_reload))} seconds.</p> '
 
 
 def timestamp(date: datetime) -> int:
@@ -141,8 +142,9 @@ class Chapter(Base):
 
     def get_images(self) -> dict:
         def default_cdn() -> list[str]:
+            accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
             headers = {
-                          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                          'Accept': accept,
                           'Referer': f'https://{Domain.get_domain()}/{self.url}'.encode(),
                           'Upgrade-Insecure-Requests': '1',
                           'Sec-Fetch-Dest': 'document',
@@ -158,7 +160,7 @@ class Chapter(Base):
             )
 
             parser = BeautifulSoup(response.text, 'html.parser')
-            pattern = re.compile(r'\?imgmax=[0-9]*$')
+            pattern = re.compile(r'\?imgmax=\d*$')
             return [re.sub(pattern, '', img.attrs['data-src']) for img in parser.select('img.lazyload')]
 
         def custom_cdn(n: int) -> list[str]:
@@ -180,7 +182,7 @@ class Chapter(Base):
 
             response = requests.post(f'https://{Domain.get_domain()}/ajax_load_server.php', headers=headers, data=data)
             soup = BeautifulSoup(response.text, 'html.parser')
-            pattern = re.compile(r'\?imgmax=[0-9]*$')
+            pattern = re.compile(r'\?imgmax=\d*$')
             return [re.sub(pattern, '', img['src']) for img in soup.select('img')]
 
         def work(worktype: str) -> list[str]:
@@ -238,13 +240,15 @@ class Doc(Base):
         return int(self.url.removeprefix('/').split('-')[0])
 
     def get_name(self) -> str:
-        pattern = re.compile(r'^[0-9]*-doc-truyen-')
+        pattern = re.compile(r'^\d*-doc-truyen-')
         return pattern.sub('', self.url)
 
     def get_chapters(self) -> list[Chapter]:
+        ref = (f'https://{Domain.get_domain()}/list-showchapter.php' +
+               '?idchapshow={self.get_id()}&idlinkanime={self.get_name()}').encode()
         headers = {
                       'Accept': '*/*',
-                      'Referer': f'https://{Domain.get_domain()}/list-showchapter.php?idchapshow={self.get_id()}&idlinkanime={self.get_name()}'.encode(),
+                      'Referer': ref,
                       'Sec-Fetch-Dest': 'empty',
                       'Sec-Fetch-Mode': 'cors',
                       'Sec-Fetch-Site': 'same-origin',
@@ -350,10 +354,10 @@ class Doc(Base):
                 if span.text.startswith(handler):
                     handlers[handler](doc, span)
 
-        return doc
+        return {'details': doc, 'from': linkify(response.url) + '.html'}
 
 
-def response2docs(response: requests.Response) -> list[Doc]:
+def response2docs(response: requests.Response) -> (list[Doc], int):
     parser = BeautifulSoup(response.text, 'html.parser')
 
     _docs = []
@@ -364,7 +368,20 @@ def response2docs(response: requests.Response) -> list[Doc]:
         url = linkify(doc.select_one('div > a').attrs['href'])
         _docs.append(Doc(title, url, cover, tags, Domain.get_domain()))
 
-    return _docs
+    maxpage = 1
+    pagebuttons = [x for x in parser.select('.pagination > li')]
+    pagenumbers = []
+    if len(pagebuttons) > 0:
+        for pb in pagebuttons:
+            ia = pb.select_one('a')
+            ib = pb.select_one('b')
+            if ia is not None and ia.text.isnumeric():
+                pagenumbers.append(int(ia.text))
+            if ib is not None and ib.text.isnumeric():
+                pagenumbers.append(int(ib.text))
+        maxpage = max(pagenumbers)
+
+    return _docs, maxpage
 
 
 def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
@@ -387,7 +404,7 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
         }
 
         response = requests.get(lurl.encode(), params=params, headers=headers)
-        return response2docs(response)
+        return response2docs(response)  # TODO: fix this or remove cusom all together
 
     r = list(range(1, pages + 1))
 
@@ -403,37 +420,35 @@ def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
     return docs
 
 
-def search(query: str, pages: int = 1) -> dict[int:list[Doc]]:
-    def single_search(page: int) -> list[Doc]:
-        headers = {
-                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                      'Upgrade-Insecure-Requests': '1',
-                      'Sec-Fetch-Dest': 'document',
-                      'Sec-Fetch-Mode': 'navigate',
-                      'Sec-Fetch-Site': 'cross-site',
-                      'Sec-GPC': '1',
-                      'Pragma': 'no-cache',
-                      'Cache-Control': 'no-cache',
-                  } | COMMON_HEADER
+def search(query: str, page: int = 1) -> (list[Doc], int):
+    headers = {
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                  'Upgrade-Insecure-Requests': '1',
+                  'Sec-Fetch-Dest': 'document',
+                  'Sec-Fetch-Mode': 'navigate',
+                  'Sec-Fetch-Site': 'cross-site',
+                  'Sec-GPC': '1',
+                  'Pragma': 'no-cache',
+                  'Cache-Control': 'no-cache',
+              } | COMMON_HEADER
 
-        params = {
-            'key': query.encode(),
-            'page': page,
-        }
+    params = {
+        'key': query.encode(),
+        'page': page,
+    }
 
-        response = requests.get(f'https://{Domain.get_domain()}/tim-kiem-truyen.html', params=params, headers=headers)
-        return response2docs(response)
-
-    r = list(range(1, pages + 1))
-    docs = parallel_map(r, single_search)
-
-    return docs
+    response = requests.get(f'https://{Domain.get_domain()}/tim-kiem-truyen.html', params=params, headers=headers)
+    docs, maxpage = response2docs(response)
+    if page > maxpage:
+        docs.clear()
+    return {'docs': docs, 'maxpage': maxpage}
 
 
 def homepage() -> dict[str:list[Doc]]:
     def get_trending() -> list[Doc]:
+        accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/jxl,image/webp,*/*;q=0.8'
         headers = {
-                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/jxl,image/webp,*/*;q=0.8',
+                      'Accept': accept,
                       'Upgrade-Insecure-Requests': '1',
                       'Sec-Fetch-Dest': 'document',
                       'Sec-Fetch-Mode': 'navigate',
