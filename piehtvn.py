@@ -3,6 +3,7 @@ import collections.abc
 import concurrent.futures
 import datetime
 import io
+import logging
 import os
 import re
 import time
@@ -110,11 +111,15 @@ class Image(Base):
         return hash(self.url)
 
     def get_request(self) -> requests.Request:
+        logging.info(f'trying to download {self.url}')
         p = urllib.parse.urlparse(self.url)
+        ref = f"https://{p.netloc}"
+        if p.netloc.startswith("up"):
+            ref = f"https://{Domain.get_domain()}"
 
         headers = {
                       "Accept-Encoding": "gzip, deflate, br",
-                      "Referer": f"{p.scheme}://{p.netloc}/",
+                      "Referer": ref,
                       "Sec-Fetch-Dest": "image",
                       "Sec-Fetch-Mode": "no-cors",
                       "Sec-Fetch-Site": "same-site",
@@ -245,7 +250,7 @@ class Doc(Base):
 
     def get_chapters(self) -> list[Chapter]:
         ref = (f'https://{Domain.get_domain()}/list-showchapter.php' +
-               '?idchapshow={self.get_id()}&idlinkanime={self.get_name()}').encode()
+               f'?idchapshow={self.get_id()}&idlinkanime={self.get_name()}').encode()
         headers = {
                       'Accept': '*/*',
                       'Referer': ref,
