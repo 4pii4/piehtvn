@@ -22,7 +22,7 @@ class Domain:
             new_domain = requests.get(s).text.strip()
             new_domain_index = requests.get(f'https://{new_domain}', headers={'User-Agent': UA})
             logging.info(f'{s} -> {new_domain}')
-            if 'Trang Chủ HentaiVN' in new_domain_index.text:
+            if '<a href="/forum/search-plus.php">Tìm kiếm nâng cao</a>' in new_domain_index.text:
                 return new_domain
         except Exception as e:
             pass

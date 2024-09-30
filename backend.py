@@ -1,12 +1,11 @@
 import dataclasses
 import json
-import logging
 import platform
 import subprocess
 from datetime import timedelta
 from functools import wraps
 
-from bottle import Bottle, request, response
+from bottle import Bottle, request, response, template
 
 from piehtvn import *
 
@@ -14,7 +13,7 @@ from piehtvn import *
 def main():
     start_time = time.time()
 
-    output = subprocess.check_output(['whoami']).decode('utf-8')
+    whoami_output = subprocess.check_output(['whoami']).decode('utf-8')
     commitid = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8')
     commitid_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')
     if platform.system() == 'Windows':
@@ -33,7 +32,6 @@ def main():
         @wraps(fn)
         def _log_to_logger(*args, **kwargs):
             actual_response = fn(*args, **kwargs)
-            # modify this to log exactly what you need:
             logging.info('%s %s %s %s' % (request.remote_addr,
                                           request.method,
                                           request.url,
@@ -58,12 +56,17 @@ def main():
 
     @app.route('/')
     def root():
-        return (('<title>Welcome to PieHTVN</title><h1>Welcome to <a '
-                 'href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1><p>Backend is running as <b>') + output +
-                '</b> on <b>' + osver + '</b></p>\n<p>Current git commit: <b><a '
-                                        'href="https://github.com/4pii4/piehtvn/commit/' + commitid + '">' +
-                commitid_short + '</a></b></p>\n<p>Current pointed domain: <b>' + Domain.get_domain() +
-                '</b></p>\nUptime: <b>' + uptime_calculate() + '</b>')
+        return template('''
+<!DOCTYPE html>
+<html lang="">
+<title>Welcome to PieHTVN</title>
+<h1>Welcome to <a href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1>
+<p>Backend is running as <b>{{user}}</b> on <b>{{osver}}</b></p>
+<p>Current git commit: <b><a href="https://github.com/4pii4/piehtvn/commit/{{commitid}}">{{commitid_short}}</a></b></p>
+<p>Current pointed domain: <b>{{domain}}</b></p>
+<p>Uptime: <b>{{uptime}}</b></p>
+</html>
+        ''', user=whoami_output, osver=osver, commitid=commitid, commitid_short=commitid_short, domain=Domain.get_domain(), uptime=uptime_calculate())
 
     @app.route('/homepage')
     def backend_homepage():
