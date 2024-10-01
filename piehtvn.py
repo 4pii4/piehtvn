@@ -414,8 +414,6 @@ def custom_url(url: str, page: int = 1) -> (list[Doc], int):
         'page': page,
     }
 
-    print(url, page)
-
     response = requests.get(f'https://{Domain.get_domain()}/{url}', params=params, headers=headers)
     docs, maxpage = response2docs(response)
     if page > maxpage:
