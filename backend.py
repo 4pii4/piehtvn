@@ -13,15 +13,16 @@ from piehtvn import *
 def main():
     start_time = time.time()
 
-    whoami_output = subprocess.check_output(['whoami']).decode('utf-8')
-    commitid = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8')
-    commitid_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')
+    whoami_output = subprocess.check_output(['whoami']).decode('utf-8').strip()
+    commitid = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8').strip()
+    commitid_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8').strip()
     if platform.system() == 'Windows':
         platformwin = platform.win32_ver()
         osver = 'Windows version ' + platformwin[1]
     else:
         osver = subprocess.check_output(['uname', '-s']).decode('utf-8') + ' ' + subprocess.check_output(
             ['uname', '-r']).decode('utf-8')
+        osver = osver.strip()
 
     app = Bottle()
 
@@ -32,10 +33,7 @@ def main():
         @wraps(fn)
         def _log_to_logger(*args, **kwargs):
             actual_response = fn(*args, **kwargs)
-            logging.info('%s %s %s %s' % (request.remote_addr,
-                                          request.method,
-                                          request.url,
-                                          response.status,))
+            logging.info('%s %s %s %s' % (request.remote_addr, request.method, request.url, response.status,))
             return actual_response
 
         return _log_to_logger
@@ -56,17 +54,48 @@ def main():
 
     @app.route('/')
     def root():
-        return template('''
-<!DOCTYPE html>
-<html lang="">
-<title>Welcome to PieHTVN</title>
-<h1>Welcome to <a href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1>
-<p>Backend is running as <b>{{user}}</b> on <b>{{osver}}</b></p>
-<p>Current git commit: <b><a href="https://github.com/4pii4/piehtvn/commit/{{commitid}}">{{commitid_short}}</a></b></p>
-<p>Current pointed domain: <b>{{domain}}</b></p>
-<p>Uptime: <b>{{uptime}}</b></p>
+        def li(s: str) -> str:
+            return f'<li><a href="{s}" target="blank"><code>{s}</code></a></li>'
+
+        examples = [
+            '/search?query=liyue',
+            '/get-chapters?url=36048-doc-truyen-genshin-liyue-du-ky',
+            '/get-metadata?url=36048-doc-truyen-genshin-liyue-du-ky',
+            f'/get-images?url=36048-67609-xem-truyen-genshin-liyue-du-ky-ganyu',
+            '/download-image?url=https://i3.hhentai.net/images/2024/01/27/1706374832-16.jpg',
+            '/tag/the-loai-133-big_ass.html',
+            '/reload'
+        ]
+
+        return template('''<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PieHTVN</title>
+    <style type="text/css">
+      html { background-color: #eee; font-family: sans; }
+      body { background-color: #fff; border: 1px solid #ddd; padding: 15px; margin: 15px; }
+      pre, code { background-color: #818b981f; color: black; border-radius: 5px; padding: 3px; font-family: "Courier New", Courier, monospace; }
+    </style>
+  </head>
+  <body>
+    <h1>Welcome to <a href="https://github.com/4pii4/piehtvn">PieHTVN</a></h1>
+    <p>Backend is running as <code>{{user}}</code> on <code>{{osver}}</code></p>
+    <p>
+      Current git commit: <code><a href="https://github.com/4pii4/piehtvn/commit/{{commitid}}">{{commitid_short}}</a></code>
+    </p>
+    <p>Current pointed domain: <code>{{domain}}</code></p>
+    <p>Uptime: <code>{{uptime}}</code></p>
+    <p>Examples:</p>
+    <ul>
+''' + '\n'.join([li(s) for s in examples]) +
+                        '''
+    </ul>
+  </body>
 </html>
-        ''', user=whoami_output, osver=osver, commitid=commitid, commitid_short=commitid_short, domain=Domain.get_domain(), uptime=uptime_calculate())
+
+''', user=whoami_output, osver=osver, commitid=commitid, commitid_short=commitid_short, domain=Domain.get_domain(),
+                        uptime=uptime_calculate())
 
     @app.route('/homepage')
     def backend_homepage():
@@ -80,16 +109,6 @@ def main():
         page = int(request.query.page or 1)
 
         return generate_response(search(query, page))
-
-    @app.route('/custom')
-    def backend_search():
-        if request.query.url is None:
-            return 'missing url parameter'
-
-        pages = int(request.query.pages or 1)
-        url = f'https://{Domain.get_domain()}/{request.query.url}'
-
-        return generate_response(custom_url(url, pages))
 
     # noinspection PyTypeChecker
     @app.route('/get-chapters')
@@ -117,6 +136,13 @@ def main():
         with requests.Session() as session:
             resp = session.send(img.get_request().prepare())
         return resp.content
+
+    @app.route('/tag/<tag>')
+    def backend_tag(tag: str):
+        page = int(request.query.page or 1)
+        if not re.match('^the-loai-[0-9]+[a-z_]*', tag):
+            return 'invalid tag link'
+        return generate_response(custom_url(tag, page))
 
     @app.route('/reload')
     def backend_reload():

@@ -34,7 +34,7 @@ def reload():
         return f'<title>Domain updated!</title><p>Successfully updated domain to {Domain.update_domain()}</p>'
     else:
         return f'<title>Domain not updated!</title><p>Rate-limited due to too many requests. ' + \
-               'Please wait {int(30 - (time.time() - last_reload))} seconds.</p> '
+               f'Please wait {int(30 - (time.time() - last_reload))} seconds.</p> '
 
 
 def timestamp(date: datetime) -> int:
@@ -111,11 +111,11 @@ class Image(Base):
         return hash(self.url)
 
     def get_request(self) -> requests.Request:
-        logging.info(f'trying to download {self.url}')
-        p = urllib.parse.urlparse(self.url)
-        ref = f"https://{p.netloc}"
-        if p.netloc.startswith("up"):
-            ref = f"https://{Domain.get_domain()}"
+        # logging.info(f'trying to download {self.url}')
+        # p = urllib.parse.urlparse(self.url)
+        # ref = f"https://{p.netloc}"
+        # if p.netloc.startswith("up"):
+        ref = f"https://{Domain.get_domain()}"
 
         headers = {
                       "Accept-Encoding": "gzip, deflate, br",
@@ -362,6 +362,15 @@ class Doc(Base):
         return {'details': doc, 'from': linkify(response.url) + '.html'}
 
 
+@dataclass
+class TagPage(Base):
+    tag_name: str
+    tag_desc: str
+    url: str
+    domain: str
+    docs: list[Doc]
+
+
 def response2docs(response: requests.Response) -> (list[Doc], int):
     parser = BeautifulSoup(response.text, 'html.parser')
 
@@ -389,40 +398,29 @@ def response2docs(response: requests.Response) -> (list[Doc], int):
     return _docs, maxpage
 
 
-def custom_url(url: str, pages: int = 1) -> dict[int, list[Doc]]:
-    def single_custom(lurl: str, page: int) -> list[Doc]:
-        lurl = f'{lurl}?page={page}'
+def custom_url(url: str, page: int = 1) -> (list[Doc], int):
+    headers = {
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                  'Upgrade-Insecure-Requests': '1',
+                  'Sec-Fetch-Dest': 'document',
+                  'Sec-Fetch-Mode': 'navigate',
+                  'Sec-Fetch-Site': 'cross-site',
+                  'Sec-GPC': '1',
+                  'Pragma': 'no-cache',
+                  'Cache-Control': 'no-cache',
+              } | COMMON_HEADER
 
-        headers = {
-                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                      'Referer': lurl.encode(),
-                      'Upgrade-Insecure-Requests': '1',
-                      'Sec-Fetch-Dest': 'document',
-                      'Sec-Fetch-Mode': 'navigate',
-                      'Sec-Fetch-Site': 'same-origin',
-                      'Sec-Fetch-User': '?1',
-                      'Sec-GPC': '1',
-                  } | COMMON_HEADER
+    params = {
+        'page': page,
+    }
 
-        params = {
-            'page': page,
-        }
+    print(url, page)
 
-        response = requests.get(lurl.encode(), params=params, headers=headers)
-        return response2docs(response)  # TODO: fix this or remove cusom all together
-
-    r = list(range(1, pages + 1))
-
-    docs = {}
-
-    # todo: refactor this later
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        future_to_url = {executor.submit(single_custom, url, page): page for page in r}
-        for future in concurrent.futures.as_completed(future_to_url):
-            page = future_to_url[future]
-            docs[page] = future.result()
-
-    return docs
+    response = requests.get(f'https://{Domain.get_domain()}/{url}', params=params, headers=headers)
+    docs, maxpage = response2docs(response)
+    if page > maxpage:
+        docs.clear()
+    return {'docs': docs, 'maxpage': maxpage}
 
 
 def search(query: str, page: int = 1) -> (list[Doc], int):
