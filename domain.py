@@ -19,11 +19,13 @@ class Domain:
     def test_remote_source(s: str):
         try:
             logging.info(f'about to resolve {s}')
-            new_domain = requests.get(s).text.strip()
-            new_domain_index = requests.get(f'https://{new_domain}', headers={'User-Agent': UA})
-            logging.info(f'{s} -> {new_domain}')
-            if '<a href="/forum/search-plus.php">Tìm kiếm nâng cao</a>' in new_domain_index.text:
-                return new_domain
+            test_domain = requests.get(s).text.strip()
+            test_request = requests.get(f'https://{test_domain}', headers={'User-Agent': UA})
+            target_domain = test_request.url.removeprefix('https://').removesuffix('/')
+            logging.info(f'{s} -> {test_domain} -> {target_domain}')
+            if '<a href="/forum/search-plus.php">Tìm kiếm nâng cao</a>' in test_request.text:
+                # skip multiple redirects and image referrer errors
+                return target_domain
         except Exception as e:
             pass
 
