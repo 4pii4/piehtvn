@@ -1,6 +1,7 @@
 import json
 import requests
 import logging
+requests.packages.urllib3.util.connection.HAS_IPV6 = False
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0'
 

@@ -13,6 +13,8 @@ from datetime import datetime
 from domain import Domain
 
 import requests
+requests.packages.urllib3.util.connection.HAS_IPV6 = False
+
 import six
 from bs4 import BeautifulSoup
 
