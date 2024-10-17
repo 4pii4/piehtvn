@@ -18,9 +18,9 @@ import six
 from bs4 import BeautifulSoup
 
 COMMON_HEADER = {
-    "User-Agent": piehtvn_config.user_agent,
-    "Accept-Language": "en-US,en;q=0.5",
-    "Connection": "keep-alive",
+    'User-Agent': piehtvn_config.user_agent,
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Connection': 'keep-alive',
 }
 
 last_reload = -1
@@ -36,7 +36,7 @@ def reload():
         return f'<title>Domain updated!</title><p>Successfully updated domain to {Domain.update_domain()}</p>'
     else:
         return f'<title>Domain not updated!</title><p>Rate-limited due to too many requests. ' + \
-               f'Please wait {int(30 - (time.time() - last_reload))} seconds.</p> '
+            f'Please wait {int(30 - (time.time() - last_reload))} seconds.</p> '
 
 
 def timestamp(date: datetime) -> int:
@@ -113,25 +113,9 @@ class Image(Base):
         return hash(self.url)
 
     def get_request(self) -> requests.Request:
-        # logging.info(f'trying to download {self.url}')
-        # p = urllib.parse.urlparse(self.url)
-        # ref = f"https://{p.netloc}"
-        # if p.netloc.startswith("up"):
-        ref = f"https://{Domain.get_domain()}"
-
-        headers = {
-                      "Accept-Encoding": "gzip, deflate, br",
-                      "Referer": ref,
-                      "Sec-Fetch-Dest": "image",
-                      "Sec-Fetch-Mode": "no-cors",
-                      "Sec-Fetch-Site": "same-site",
-                      "Sec-GPC": "1",
-                      "Pragma": "no-cache",
-                      "Cache-Control": "no-cache",
-                      "TE": "trailers"
-                  } | COMMON_HEADER
-
-        return requests.Request("GET", self.url, headers=headers, params={"imgmax": "1200"})
+        ref = f'https://{Domain.get_domain()}'
+        headers = {'Accept-Encoding': 'gzip, deflate, br', 'Referer': ref} | COMMON_HEADER
+        return requests.Request('GET', self.url, headers=headers, params={'imgmax': '1200'})
 
     def file_name(self) -> str:
         return os.path.basename(urllib.parse.urlparse(self.url).path)
@@ -148,51 +132,41 @@ class Chapter(Base):
         return int(self.url.split('-')[1])
 
     def get_images(self) -> dict:
-        def default_cdn() -> list[str]:
-            accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-            headers = {
-                          'Accept': accept,
-                          'Referer': f'https://{Domain.get_domain()}/{self.url}'.encode(),
-                          'Upgrade-Insecure-Requests': '1',
-                          'Sec-Fetch-Dest': 'document',
-                          'Sec-Fetch-Mode': 'navigate',
-                          'Sec-Fetch-Site': 'same-origin',
-                          'Sec-GPC': '1',
-                      } | COMMON_HEADER
-
-            response = requests.get(
-                f'https://{Domain.get_domain()}/{urllib.parse.quote(self.url)}'.encode(),
-                headers=headers,
-                params={'ie': 'utf-8'}
-            )
-
-            parser = BeautifulSoup(response.text, 'html.parser')
-            pattern = re.compile(r'\?imgmax=\d*$')
-            return [re.sub(pattern, '', img.attrs['data-src']) for img in parser.select('img.lazyload')]
-
-        def custom_cdn(n: int) -> list[str]:
-            headers = {
-                          'Accept': '*/*',
-                          'Referer': f'https://{Domain.get_domain()}/ajax_load_server.php',
-                          'Content-Type': 'application/x-www-form-urlencoded',
-                          'X-Requested-With': 'XMLHttpRequest',
-                          'Origin': f'https://{Domain.get_domain()}',
-                          'Sec-Fetch-Dest': 'empty',
-                          'Sec-Fetch-Mode': 'cors',
-                          'Sec-Fetch-Site': 'same-origin',
-                      } | COMMON_HEADER
-
-            data = {
-                'server_id': self.get_id(),
-                'server_type': str(n),
-            }
-
-            response = requests.post(f'https://{Domain.get_domain()}/ajax_load_server.php', headers=headers, data=data)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            pattern = re.compile(r'\?imgmax=\d*$')
-            return [re.sub(pattern, '', img['src']) for img in soup.select('img')]
-
         def work(worktype: str) -> list[str]:
+            # region cdn functions
+            def default_cdn() -> list[str]:
+                response = requests.get(
+                    f'https://{Domain.get_domain()}/{urllib.parse.quote(self.url)}'.encode(),
+                    headers=COMMON_HEADER,
+                    params={'ie': 'utf-8'}
+                )
+
+                parser = BeautifulSoup(response.text, 'html.parser')
+                pattern = re.compile(r'\?imgmax=\d*$')
+                return [re.sub(pattern, '', img.attrs['data-src']) for img in parser.select('img.lazyload')]
+
+            def custom_cdn(n: int) -> list[str]:
+                headers = {
+                              'Accept': '*/*',
+                              'Referer': f'https://{Domain.get_domain()}/ajax_load_server.php',
+                              'Content-Type': 'application/x-www-form-urlencoded',
+                              'X-Requested-With': 'XMLHttpRequest',
+                              'Origin': f'https://{Domain.get_domain()}',
+                          } | COMMON_HEADER
+
+                data = {
+                    'server_id': self.get_id(),
+                    'server_type': str(n),
+                }
+
+                response = requests.post(f'https://{Domain.get_domain()}/ajax_load_server.php', headers=headers,
+                                         data=data)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                pattern = re.compile(r'\?imgmax=\d*$')
+                return [re.sub(pattern, '', img['src']) for img in soup.select('img')]
+
+            # endregion
+
             if worktype == 'default':
                 return default_cdn()
             elif re.match('cdn[12]', worktype):
@@ -251,24 +225,12 @@ class Doc(Base):
         return pattern.sub('', self.url)
 
     def get_chapters(self) -> list[Chapter]:
-        ref = (f'https://{Domain.get_domain()}/list-showchapter.php' +
-               f'?idchapshow={self.get_id()}&idlinkanime={self.get_name()}').encode()
-        headers = {
-                      'Accept': '*/*',
-                      'Referer': ref,
-                      'Sec-Fetch-Dest': 'empty',
-                      'Sec-Fetch-Mode': 'cors',
-                      'Sec-Fetch-Site': 'same-origin',
-                      'Sec-GPC': '1',
-                  } | COMMON_HEADER
-
         params = {
             'idchapshow': self.get_id(),
             'idlinkanime': self.get_name(),
         }
 
-        response = requests.get(f'https://{Domain.get_domain()}/list-showchapter.php'.encode(), params=params,
-                                headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/list-showchapter.php'.encode(), params=params, headers=COMMON_HEADER)
         parser = BeautifulSoup(response.text, 'html.parser')
 
         tds = parser.select('tr > td')
@@ -306,7 +268,7 @@ class Doc(Base):
 
         def handle_description(parent, element):
             lst = list(element.parent.parent.findAll('p'))
-            parent.desc = lst[index_of_first_after(lst, lambda x: x.text.startswith("Nội dung"))].text
+            parent.desc = lst[index_of_first_after(lst, lambda x: x.text.startswith('Nội dung'))].text
 
         def handle_follow_at(parent, element):
             e = element.parent.find('a')
@@ -320,25 +282,21 @@ class Doc(Base):
 
         headers = {
                       'Referer': f'https://{Domain.get_domain()}/${self.url}'.encode(),
-                      'Sec-Fetch-Dest': 'document',
-                      'Sec-Fetch-Mode': 'navigate',
-                      'Sec-Fetch-Site': 'same-origin',
-                      'Sec-GPC': '1',
                   } | COMMON_HEADER
 
         response = requests.get(f'https://{Domain.get_domain()}/{self.url}'.encode(), headers=headers)
 
         handlers = {
-            "Tên Khác": handle_other_names,
-            "Thể Loại": handle_categories,
-            "Nhóm dịch": handle_translator,
-            "Tác giả": handle_author,
-            "Nhân vật": handle_characters,
-            "Doujinshi": handle_doujinshi,
-            "Thực hiện": handle_uploader,
-            "Tình Trạng": handle_status,
-            "Nội dung": handle_description,
-            "Theo dõi tại": handle_follow_at,
+            'Tên Khác': handle_other_names,
+            'Thể Loại': handle_categories,
+            'Nhóm dịch': handle_translator,
+            'Tác giả': handle_author,
+            'Nhân vật': handle_characters,
+            'Doujinshi': handle_doujinshi,
+            'Thực hiện': handle_uploader,
+            'Tình Trạng': handle_status,
+            'Nội dung': handle_description,
+            'Theo dõi tại': handle_follow_at,
         }
 
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -401,22 +359,7 @@ def response2docs(response: requests.Response) -> (list[Doc], int):
 
 
 def custom_url(url: str, page: int = 1) -> (list[Doc], int):
-    headers = {
-                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                  'Upgrade-Insecure-Requests': '1',
-                  'Sec-Fetch-Dest': 'document',
-                  'Sec-Fetch-Mode': 'navigate',
-                  'Sec-Fetch-Site': 'cross-site',
-                  'Sec-GPC': '1',
-                  'Pragma': 'no-cache',
-                  'Cache-Control': 'no-cache',
-              } | COMMON_HEADER
-
-    params = {
-        'page': page,
-    }
-
-    response = requests.get(f'https://{Domain.get_domain()}/{url}', params=params, headers=headers)
+    response = requests.get(f'https://{Domain.get_domain()}/{url}', params={'page': page}, headers=COMMON_HEADER)
     docs, maxpage = response2docs(response)
     if page > maxpage:
         docs.clear()
@@ -424,23 +367,12 @@ def custom_url(url: str, page: int = 1) -> (list[Doc], int):
 
 
 def search(query: str, page: int = 1) -> (list[Doc], int):
-    headers = {
-                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                  'Upgrade-Insecure-Requests': '1',
-                  'Sec-Fetch-Dest': 'document',
-                  'Sec-Fetch-Mode': 'navigate',
-                  'Sec-Fetch-Site': 'cross-site',
-                  'Sec-GPC': '1',
-                  'Pragma': 'no-cache',
-                  'Cache-Control': 'no-cache',
-              } | COMMON_HEADER
-
     params = {
         'key': query.encode(),
         'page': page,
     }
 
-    response = requests.get(f'https://{Domain.get_domain()}/tim-kiem-truyen.html', params=params, headers=headers)
+    response = requests.get(f'https://{Domain.get_domain()}/tim-kiem-truyen.html', params=params, headers=COMMON_HEADER)
     docs, maxpage = response2docs(response)
     if page > maxpage:
         docs.clear()
@@ -449,19 +381,7 @@ def search(query: str, page: int = 1) -> (list[Doc], int):
 
 def homepage() -> dict[str:list[Doc]]:
     def get_trending() -> list[Doc]:
-        accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/jxl,image/webp,*/*;q=0.8'
-        headers = {
-                      'Accept': accept,
-                      'Upgrade-Insecure-Requests': '1',
-                      'Sec-Fetch-Dest': 'document',
-                      'Sec-Fetch-Mode': 'navigate',
-                      'Sec-Fetch-Site': 'cross-site',
-                      'Sec-GPC': '1',
-                      'Pragma': 'no-cache',
-                      'Cache-Control': 'no-cache',
-                  } | COMMON_HEADER
-
-        response = requests.get(f'https://{Domain.get_domain()}/', headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/', headers=COMMON_HEADER)
         soup = BeautifulSoup(response.text, 'html.parser')
         trending = []
         for t in soup.select('#myDIV > ul > li'):
@@ -473,23 +393,7 @@ def homepage() -> dict[str:list[Doc]]:
         return trending
 
     def get_recent() -> list[Doc]:
-        cookies = {
-            'tataxoff': '1',
-        }
-
-        headers = {
-                      'Accept': '*/*',
-                      'Referer': f'https://{Domain.get_domain()}/list-moicapnhat-doc.php',
-                      'Sec-Fetch-Dest': 'empty',
-                      'Sec-Fetch-Mode': 'cors',
-                      'Sec-Fetch-Site': 'same-origin',
-                      'Sec-GPC': '1',
-                      'Pragma': 'no-cache',
-                      'Cache-Control': 'no-cache',
-                  } | COMMON_HEADER
-
-        response = requests.get(f'https://{Domain.get_domain()}/list-moicapnhat-doc.php', cookies=cookies,
-                                headers=headers)
+        response = requests.get(f'https://{Domain.get_domain()}/list-moicapnhat-doc.php', headers=COMMON_HEADER)
         soup = BeautifulSoup(response.text, 'html.parser')
         recent = []
         for t in soup.select('.item > ul'):

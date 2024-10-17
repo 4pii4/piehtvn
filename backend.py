@@ -20,11 +20,9 @@ def main():
     commitid_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8').strip()
     if platform.system() == 'Windows':
         platformwin = platform.win32_ver()
-        osver = 'Windows version ' + platformwin[1]
+        osver = f'Windows {platformwin[0]} build {platformwin[1]}'
     else:
-        osver = subprocess.check_output(['uname', '-s']).decode('utf-8') + ' ' + subprocess.check_output(
-            ['uname', '-r']).decode('utf-8')
-        osver = osver.strip()
+        osver = subprocess.check_output(['uname', '-sr']).decode('utf-8').strip()
 
     app = Bottle()
 
@@ -32,7 +30,7 @@ def main():
         @wraps(fn)
         def _log_to_logger(*args, **kwargs):
             actual_response = fn(*args, **kwargs)
-            logging.info('%s %s %s %s' % (request.remote_addr, request.method, request.url, response.status,))
+            logging.info('%s %s %s %s' % (request.remote_addr, request.method, request.url, response.status))
             return actual_response
 
         return _log_to_logger
@@ -44,7 +42,7 @@ def main():
                     return dataclasses.asdict(o)
                 return super().default(o)
 
-        response.set_header("Access-Control-Allow-Origin", "*")
+        response.set_header('Access-Control-Allow-Origin', '*')
         response.content_type = 'application/json'
         return json.dumps(obj, ensure_ascii=False, cls=EnhancedJSONEncoder)
 
@@ -58,9 +56,10 @@ def main():
 
         examples = [
             '/search?query=liyue',
+            '/homepage',
             '/get-chapters?url=36048-doc-truyen-genshin-liyue-du-ky',
             '/get-metadata?url=36048-doc-truyen-genshin-liyue-du-ky',
-            f'/get-images?url=36048-67609-xem-truyen-genshin-liyue-du-ky-ganyu',
+            '/get-images?url=36048-67609-xem-truyen-genshin-liyue-du-ky-ganyu',
             '/download-image?url=https://i3.hhentai.net/images/2024/01/27/1706374832-16.jpg',
             '/tag/the-loai-133-big_ass.html',
             '/reload'
@@ -83,13 +82,13 @@ def main():
     <p>
       Current git commit: <code><a href="https://github.com/4pii4/piehtvn/commit/{{commitid}}">{{commitid_short}}</a></code>
     </p>
-    <p>Current pointed domain: <code>{{domain}}</code></p>
+    <p>Current HentaiVN domain: <a href="https://{{domain}}">{{domain}}</a></p>
     <p>Uptime: <code>{{uptime}}</code></p>
-    <p>Examples:</p>
+    <p>Quick start:
     <ul>
 ''' + '\n'.join([li(s) for s in examples]) +
                         '''
-    </ul>
+    </ul></p>
   </body>
 </html>
 
@@ -130,7 +129,7 @@ def main():
     @app.route('/download-image')
     def backend_download_image():
         img = Image(request.query.url)
-        response.set_header("Access-Control-Allow-Origin", "*")
+        response.set_header('Access-Control-Allow-Origin', '*')
         response.content_type = f'image/{img.url.split(".")[-1]}'
         with requests.Session() as session:
             resp = session.send(img.get_request().prepare())
@@ -147,14 +146,10 @@ def main():
     def backend_reload():
         return reload()
 
-    @app.route('/domain')
-    def backend_domain():
-        return Domain.get_domain()
-
     requests.packages.urllib3.util.connection.HAS_IPV6 = piehtvn_config.use_ipv6
 
     logging.basicConfig(format='[%(levelname)s] [%(asctime)s] %(msg)s', level=logging.INFO)
-    logging.info(f"listening on {piehtvn_config.host}:{piehtvn_config.port}")
+    logging.info(f'listening on {piehtvn_config.host}:{piehtvn_config.port}')
     app.install(log_to_logger)
     app.run(host=piehtvn_config.host, port=piehtvn_config.port, quiet=True)
 
