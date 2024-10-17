@@ -4,10 +4,12 @@ import platform
 import subprocess
 from datetime import timedelta
 from functools import wraps
+import logging
 
 from bottle import Bottle, request, response, template
 
 from piehtvn import *
+import piehtvn_config
 
 
 def main():
@@ -25,9 +27,6 @@ def main():
         osver = osver.strip()
 
     app = Bottle()
-
-    with open('config.json') as f:
-        config = json.loads(f.read())
 
     def log_to_logger(fn):
         @wraps(fn)
@@ -152,10 +151,12 @@ def main():
     def backend_domain():
         return Domain.get_domain()
 
+    requests.packages.urllib3.util.connection.HAS_IPV6 = piehtvn_config.use_ipv6
+
     logging.basicConfig(format='[%(levelname)s] [%(asctime)s] %(msg)s', level=logging.INFO)
-    logging.info(f"listening on {config['host']}:{config['port']}")
+    logging.info(f"listening on {piehtvn_config.host}:{piehtvn_config.port}")
     app.install(log_to_logger)
-    app.run(host=config['host'], port=config['port'], quiet=True)
+    app.run(host=piehtvn_config.host, port=piehtvn_config.port, quiet=True)
 
 
 if __name__ == '__main__':

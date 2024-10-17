@@ -1,37 +1,35 @@
-import json
+
 import requests
 import logging
 
-UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0'
+import piehtvn_config
+
+requests.packages.urllib3.util.connection.HAS_IPV6 = piehtvn_config.use_ipv6
 
 
 class Domain:
     domain: str = None
 
-    # multiple urls, one link per url
-    @staticmethod
-    def get_remote_sources():
-        with open('config.json', 'r') as f:
-            sources = json.loads(f.read())['remote-sources']
-        return sources
-
     @staticmethod
     def test_remote_source(s: str):
+        result = None
+
         try:
             logging.info(f'about to resolve {s}')
             test_domain = requests.get(s).text.strip()
-            test_request = requests.get(f'https://{test_domain}', headers={'User-Agent': UA})
+            test_request = requests.get(f'https://{test_domain}', headers={'User-Agent': piehtvn_config.user_agent})
+            # skip multiple redirects and image referrer errors
             target_domain = test_request.url.removeprefix('https://').removesuffix('/')
             logging.info(f'{s} -> {test_domain} -> {target_domain}')
             if '<a href="/forum/search-plus.php">Tìm kiếm nâng cao</a>' in test_request.text:
-                # skip multiple redirects and image referrer errors
-                return target_domain
+                result = target_domain
         except Exception as e:
             pass
+        return result
 
     @staticmethod
     def get_first_domain():
-        for sr in Domain.get_remote_sources():
+        for sr in piehtvn_config.remote_sources:
             r = Domain.test_remote_source(sr)
             if r is not None:
                 return r

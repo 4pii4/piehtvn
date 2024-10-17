@@ -3,27 +3,29 @@ import collections.abc
 import concurrent.futures
 import datetime
 import io
-import logging
 import os
 import re
 import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
+
 from domain import Domain
+import piehtvn_config
 
 import requests
 import six
 from bs4 import BeautifulSoup
 
-UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0'
 COMMON_HEADER = {
-    "User-Agent": UA,
+    "User-Agent": piehtvn_config.user_agent,
     "Accept-Language": "en-US,en;q=0.5",
     "Connection": "keep-alive",
 }
 
 last_reload = -1
+
+requests.packages.urllib3.util.connection.HAS_IPV6 = piehtvn_config.use_ipv6
 
 
 def reload():
@@ -345,7 +347,7 @@ class Doc(Base):
         doc = DocInfo(None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
         doc.cover = soup.select_one('.page-ava > img').attrs['src']
         doc.id = int(soup.select_one('#myInputxx').attrs['value'])
-        doc.name = page_info.find('a').text.removeprefix("\n").removesuffix("\n")
+        doc.name = soup.select_one('.page-ava > img').attrs['alt'].removeprefix('Truyện hentai ')
         doc.likes = int(soup.find('div', {'class': 'but_like'}).text)
         doc.dislikes = int(soup.find('div', {'class': 'but_unlike'}).text)
         doc.last_updated = timestamp(datetime.strptime(page_info.find('i').text, '%H:%M - %d/%m/%Y'))

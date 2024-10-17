@@ -1,7 +1,0 @@
-{
-  "host": "0.0.0.0",
-  "port": 7479,
-  "remote-sources": [
-      "https://raw.githubusercontent.com/SauceEnjoyer/htvn/main/remote_url"
-  ]
-}
