@@ -319,7 +319,7 @@ class Doc(Base):
                 if span.text.startswith(handler):
                     handlers[handler](doc, span)
 
-        return {'details': doc, 'from': linkify(response.url) + '.html'}
+        return {'details': doc, 'from': soup.find('link', attrs={'rel': 'alternate', 'hreflang': True}).attrs['href']}
 
 
 @dataclass
