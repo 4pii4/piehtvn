@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import platform
+import re
 import subprocess
 from datetime import timedelta
 from functools import wraps
@@ -138,9 +139,18 @@ def main():
     @app.route('/tag/<tag>')
     def backend_tag(tag: str):
         page = int(request.query.page or 1)
-        if not re.match('^the-loai-[0-9]+[a-z_]*', tag):
-            return 'invalid tag link'
-        return generate_response(custom_url(tag, page))
+        if re.match('^the-loai-[0-9]+-[a-z_0-9]*(\\.html)?$', tag): # have the number thingy
+            return generate_response(custom_url(tag, page))
+        elif re.match('^the-loai-[a-z_0-9]+(\\.html)?$', tag):
+            from piehtvn import COMMON_HEADER
+            resp = requests.post(f'https://{Domain.get_domain()}/tag_box.php', headers=COMMON_HEADER)
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            tag_links = [e.attrs['href'] for e in soup.select('a')]
+            tag_body = re.match('^the-loai-([0-9a-z_]+)(\\.html)?$', tag).group(1)
+            for tag_link in tag_links:
+                if re.match(f'^/the-loai-[0-9]+-{tag_body}(\\.html)?$', tag_link):
+                    return generate_response(custom_url(tag_link, page))
+
 
     @app.route('/reload')
     def backend_reload():
